@@ -1,0 +1,2 @@
+[napari.manifest]
+napari-lsec-afm = napari_lsec_afm:napari.yaml
