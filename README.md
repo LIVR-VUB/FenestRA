@@ -16,7 +16,7 @@ By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated 
 
 ---
 
-## 🚀 Features
+## Features
 - **Hub-and-Spoke Deep Learning Architecture:** Run legacy Python 3.8 dependent upscale models asynchronously inside a Singularity container without freezing your modern Napari GUI.
 - **Native JPK Ingestion:** Automatically reads native physical scale (`nm / px`) from `.jpk.qi-image` files using AFMReader.
 - **Synchronized 4-Pane Analysis:** Auto-generates a synchronized Napari viewer layout combining Raw, Upsampled, Mask, and Boundary Overlays natively.
@@ -25,7 +25,7 @@ By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated 
 
 ---
 
-## 🛠 Installation
+## Installation
 
 ### 1. Requirements
 Ensure you have `Apptainer` or `Singularity` installed on your system to run the Super-Resolution container logic.
@@ -60,7 +60,7 @@ pip install -e .
 
 ---
 
-## 🎯 Usage
+## Usage
 
 1. Activate your environment: `conda activate fenestra-env`
 2. Launch napari: `napari`
