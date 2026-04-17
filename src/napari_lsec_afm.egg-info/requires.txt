@@ -1,8 +1,0 @@
-numpy>=1.26.0
-magicgui
-qtpy
-scikit-image
-scipy
-tifffile
-cellpose
-pandas
