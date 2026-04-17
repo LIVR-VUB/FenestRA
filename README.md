@@ -1,5 +1,14 @@
+<p align="center">
+  <img src="misc/FenestRA.jpg" alt="FenestRA Logo" width="600"/>
+</p>
+
 # FenestRA
 **Fenestration Resolution & Analysis Pipeline**
+
+![Python](https://img.shields.io/badge/python-3.10-blue.svg)
+![Napari](https://img.shields.io/badge/napari-plugin-orange.svg)
+![CUDA](https://img.shields.io/badge/CUDA-12.4-76B900.svg?logo=nvidia)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.4-ee4c2c.svg?logo=pytorch)
 
 FenestRA is a custom Napari plugin built for the Advanced LSEC AFM Pipeline. It bridges the gap between interactive Napari features, legacy deep-learning upscale repositories via Apptainer, and state-of-the-art Cellpose instance segmentation. 
 
