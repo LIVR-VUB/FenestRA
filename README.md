@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="misc/FenestRA.jpg" alt="FenestRA Logo" width="350"/>
+  <img src="misc/FenestRA.jpg" alt="FenestRA Logo" width="450"/>
 </p>
 
 # FenestRA
