@@ -58,6 +58,29 @@ cd FenestRA
 pip install -e .
 ```
 
+### 4. Setup the Deep Learning Backend (Docker vs Singularity)
+
+FenestRA runs its massive deep learning architectures completely independently from the modern Napari UI. You must compile the container engine based on your Operating System:
+
+**For Windows & macOS Users (Docker Desktop):**
+Because Apple and Windows systems cannot securely install Singularity, we use Docker.
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine.
+2. Open a terminal and navigate to this repository's `containers/` directory.
+3. Build the backend image (Windows/Mac users do NOT need `sudo`):
+```bash
+docker build -t livrvub/dl-upsampling:latest -f Dockerfile ..
+```
+*(In Napari, select **Docker** from the Engine dropdown. No file browsing needed!)*
+
+**For Native Linux Users (Singularity / Apptainer):**
+Linux systems heavily restrict Docker permissions. For ultimate performance and hassle-free paths on Linux, use Apptainer/Singularity.
+1. Install Apptainer natively on your Linux distribution.
+2. Open a terminal and build the container using the provided definition recipe:
+```bash
+sudo apptainer build dl_upsampling.sif containers/dl_upsampling.def
+```
+*(In Napari, select **Singularity** from the Engine dropdown, and use the `...` button to select that `.sif` file!)*
+
 ---
 
 ## Usage
