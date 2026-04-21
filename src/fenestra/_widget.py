@@ -3,7 +3,7 @@ import glob
 import tempfile
 import pathlib
 
-from qtpy.QtWidgets import QVBoxLayout, QWidget, QFileDialog, QMessageBox, QGroupBox, QFormLayout, QPushButton, QLabel, QComboBox, QLineEdit, QDoubleSpinBox
+from qtpy.QtWidgets import QVBoxLayout, QWidget, QFileDialog, QMessageBox, QGroupBox, QFormLayout, QPushButton, QLabel, QComboBox, QLineEdit, QDoubleSpinBox, QCheckBox
 from qtpy.QtCore import Qt
 from magicgui import magic_factory
 from magicgui.widgets import FileEdit, Container, PushButton, ComboBox, LineEdit, Label, FloatSpinBox
@@ -11,7 +11,7 @@ import tifffile
 import numpy as np
 import napari
 
-from .pipeline import process_jpk, upsample_clahe, run_dl_upsampling, run_cellpose, quantify_fenestrations
+from .pipeline import process_jpk, upsample_clahe, run_dl_upsampling, run_cellpose, quantify_fenestrations, run_batch_pipeline
 
 class FenestraWidget(QWidget):
     def __init__(self, napari_viewer):
@@ -57,33 +57,40 @@ class FenestraWidget(QWidget):
         self.combo_method.addItems(["CLAHE (CPU)", "HAT", "SwinIR"])
         up_layout.addRow("Method:", self.combo_method)
         
-        # CLAHE params group
-        self.clahe_widget = QWidget()
-        clahe_layout = QFormLayout()
-        clahe_layout.setContentsMargins(0, 0, 0, 0)
-        self.clahe_widget.setLayout(clahe_layout)
+        # Factor (only for CLAHE)
+        self.factor_widget = QWidget()
+        factor_layout = QFormLayout()
+        factor_layout.setContentsMargins(0, 0, 0, 0)
+        self.factor_widget.setLayout(factor_layout)
         
         self.spin_up_factor = QDoubleSpinBox()
         self.spin_up_factor.setDecimals(0)
         self.spin_up_factor.setRange(1, 10)
         self.spin_up_factor.setValue(4)
-        clahe_layout.addRow("Factor:", self.spin_up_factor)
+        factor_layout.addRow("Factor:", self.spin_up_factor)
+        up_layout.addRow(self.factor_widget)
+        
+        # Postprocess params group
+        self.postprocess_widget = QWidget()
+        pp_layout = QFormLayout()
+        pp_layout.setContentsMargins(0, 0, 0, 0)
+        self.postprocess_widget.setLayout(pp_layout)
         
         self.spin_clahe_clip = QDoubleSpinBox()
         self.spin_clahe_clip.setDecimals(3)
         self.spin_clahe_clip.setSingleStep(0.01)
-        self.spin_clahe_clip.setValue(0.03)
-        clahe_layout.addRow("Clip Limit:", self.spin_clahe_clip)
+        self.spin_clahe_clip.setValue(0.02) # Moderate default
+        pp_layout.addRow("Clip Limit:", self.spin_clahe_clip)
         
         self.spin_unsharp_radius = QDoubleSpinBox()
         self.spin_unsharp_radius.setValue(1.0)
-        clahe_layout.addRow("Unsharp Radius:", self.spin_unsharp_radius)
+        pp_layout.addRow("Unsharp Radius:", self.spin_unsharp_radius)
         
         self.spin_unsharp_amount = QDoubleSpinBox()
         self.spin_unsharp_amount.setValue(1.0)
-        clahe_layout.addRow("Unsharp Amount:", self.spin_unsharp_amount)
+        pp_layout.addRow("Unsharp Amount:", self.spin_unsharp_amount)
         
-        up_layout.addRow(self.clahe_widget)
+        up_layout.addRow(self.postprocess_widget)
         
         # DL params group
         self.dl_widget = QWidget()
@@ -102,7 +109,19 @@ class FenestraWidget(QWidget):
         path_layout.addWidget(self.btn_pick_model)
         dl_layout.addRow("DL Model:", path_layout)
         
-        # Container path
+        # Engine
+        self.combo_engine = QComboBox()
+        self.combo_engine.addItems(["Singularity", "Docker"])
+        self.combo_engine.currentIndexChanged.connect(self.on_engine_changed)
+        dl_layout.addRow("Engine:", self.combo_engine)
+
+        # DL Post-process checkbox
+        self.chk_postprocess = QCheckBox("Apply Post-DL Sharpening")
+        self.chk_postprocess.toggled.connect(self.on_method_changed)
+        dl_layout.addRow("", self.chk_postprocess)
+
+        # Container path / tag
+        self.lbl_container = QLabel("Singularity (.sif):")
         self.line_container = QLineEdit("/home/arka/Desktop/AFM-Project/DL_Upsampling/containers/dl_upsampling.sif")
         self.btn_pick_container = QPushButton("...")
         self.btn_pick_container.setFixedWidth(30)
@@ -111,7 +130,7 @@ class FenestraWidget(QWidget):
         cont_layout = QVBoxLayout()
         cont_layout.addWidget(self.line_container)
         cont_layout.addWidget(self.btn_pick_container)
-        dl_layout.addRow("Singularity:", cont_layout)
+        dl_layout.addRow(self.lbl_container, cont_layout)
         
         up_layout.addRow(self.dl_widget)
         
@@ -183,6 +202,44 @@ class FenestraWidget(QWidget):
         an_group.setLayout(an_layout)
         main_layout.addWidget(an_group)
         
+        # ---------------------------------------------
+        # 5. Batch Analysis
+        # ---------------------------------------------
+        batch_group = QGroupBox("5. Batch Analysis")
+        batch_layout = QFormLayout()
+        
+        # Input directory
+        self.line_batch_input = QLineEdit()
+        self.line_batch_input.setPlaceholderText("Folder containing .jpk-qi-image files")
+        self.btn_batch_input = QPushButton("Browse")
+        self.btn_batch_input.clicked.connect(lambda: self._pick_dir(self.line_batch_input))
+        batch_input_layout = QVBoxLayout()
+        batch_input_layout.addWidget(self.line_batch_input)
+        batch_input_layout.addWidget(self.btn_batch_input)
+        batch_layout.addRow("Input Dir:", batch_input_layout)
+        
+        # Output directory
+        self.line_batch_output = QLineEdit()
+        self.line_batch_output.setPlaceholderText("Folder for results (Excel + TIFFs)")
+        self.btn_batch_output = QPushButton("Browse")
+        self.btn_batch_output.clicked.connect(lambda: self._pick_dir(self.line_batch_output))
+        batch_output_layout = QVBoxLayout()
+        batch_output_layout.addWidget(self.line_batch_output)
+        batch_output_layout.addWidget(self.btn_batch_output)
+        batch_layout.addRow("Output Dir:", batch_output_layout)
+        
+        # Progress label
+        self.lbl_batch_progress = QLabel("Idle")
+        batch_layout.addRow("Status:", self.lbl_batch_progress)
+        
+        # Run button
+        self.btn_run_batch = QPushButton("Run Batch")
+        self.btn_run_batch.clicked.connect(self.on_run_batch)
+        batch_layout.addRow("", self.btn_run_batch)
+        
+        batch_group.setLayout(batch_layout)
+        main_layout.addWidget(batch_group)
+        
         main_layout.addStretch()
         
     def pick_file(self, line_edit, filter_str):
@@ -193,8 +250,25 @@ class FenestraWidget(QWidget):
     def on_method_changed(self):
         method = self.combo_method.currentText()
         is_clahe = "CLAHE" in method
-        self.clahe_widget.setVisible(is_clahe)
+        
+        self.factor_widget.setVisible(is_clahe)
         self.dl_widget.setVisible(not is_clahe)
+        
+        if is_clahe:
+            self.postprocess_widget.setVisible(True)
+        else:
+            self.postprocess_widget.setVisible(self.chk_postprocess.isChecked())
+
+    def on_engine_changed(self):
+        engine = self.combo_engine.currentText()
+        if engine == "Docker":
+            self.lbl_container.setText("Docker Tag:")
+            self.line_container.setText("livrvub/dl-upsampling:latest")
+            self.btn_pick_container.setVisible(False)
+        else:
+            self.lbl_container.setText("Singularity (.sif):")
+            self.line_container.setText("/home/arka/Desktop/AFM-Project/DL_Upsampling/containers/dl_upsampling.sif")
+            self.btn_pick_container.setVisible(True)
 
     # --- Actions ---
 
@@ -247,8 +321,15 @@ class FenestraWidget(QWidget):
             container_path = self.line_container.text()
             arch = "hat" if "HAT" in method else "swinir"
             
-            if not os.path.exists(model_path) or not os.path.exists(container_path):
-                QMessageBox.critical(self, "Error", "Model or Container path is invalid.")
+            engine = self.combo_engine.currentText()
+            if not os.path.exists(model_path):
+                QMessageBox.critical(self, "Error", "Model path is invalid.")
+                self.btn_run_up.setText("Run Upsampling")
+                self.btn_run_up.setEnabled(True)
+                return
+                
+            if engine == "Singularity" and not os.path.exists(container_path):
+                QMessageBox.critical(self, "Error", "Singularity container path is invalid.")
                 self.btn_run_up.setText("Run Upsampling")
                 self.btn_run_up.setEnabled(True)
                 return
@@ -266,7 +347,8 @@ class FenestraWidget(QWidget):
                 temp_out_dir=temp_out_dir,
                 container_path=container_path,
                 model_path=model_path,
-                architecture=arch
+                architecture=arch,
+                engine=self.combo_engine.currentText()
             )
             
             worker.yielded.connect(self._on_dl_complete)
@@ -283,6 +365,19 @@ class FenestraWidget(QWidget):
             return
             
         self.upsampled_image = tifffile.imread(out_files[0])
+        
+        if self.chk_postprocess.isChecked():
+            clip = self.spin_clahe_clip.value()
+            uradius = self.spin_unsharp_radius.value()
+            uamount = self.spin_unsharp_amount.value()
+            from fenestra.pipeline import apply_post_processing
+            self.upsampled_image = apply_post_processing(
+                self.upsampled_image, 
+                clip_limit=clip, 
+                unsharp_radius=uradius, 
+                unsharp_amount=uamount
+            )
+            
         self.finalize_upsampling()
 
     def _on_dl_error(self, err):
@@ -374,6 +469,11 @@ class FenestraWidget(QWidget):
         self.viewer.grid.shape = (2, 2)
         self.viewer.reset_view()
 
+    def _pick_dir(self, line_edit):
+        directory = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if directory:
+            line_edit.setText(directory)
+
     def on_quantify(self):
         if self.mask_image is None or self.pixel_to_nm is None:
             QMessageBox.warning(self, "Warning", "Requires JPK loaded and Segmented Masks.")
@@ -393,4 +493,78 @@ class FenestraWidget(QWidget):
                 QMessageBox.information(self, "Success", f"Saved {len(df)} fenestrations.\nOverall Porosity: {porosity*100:.2f}%")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to quantify: {e}")
+
+    # --- Batch Analysis ---
+
+    def on_run_batch(self):
+        input_dir = self.line_batch_input.text().strip()
+        output_dir = self.line_batch_output.text().strip()
+        
+        if not input_dir or not os.path.isdir(input_dir):
+            QMessageBox.warning(self, "Warning", "Please select a valid input directory.")
+            return
+        if not output_dir:
+            QMessageBox.warning(self, "Warning", "Please select an output directory.")
+            return
+        
+        method = self.combo_method.currentText()
+        is_dl = "CLAHE" not in method
+        
+        # Validate DL paths if needed
+        if is_dl:
+            model_path = self.line_model_path.text().strip()
+            if not os.path.exists(model_path):
+                QMessageBox.critical(self, "Error", "DL Model path is invalid.")
+                return
+            engine = self.combo_engine.currentText()
+            container_path = self.line_container.text().strip()
+            if engine == "Singularity" and not os.path.exists(container_path):
+                QMessageBox.critical(self, "Error", "Singularity container path is invalid.")
+                return
+        
+        self.btn_run_batch.setText("Batch in progress...")
+        self.btn_run_batch.setEnabled(False)
+        self.lbl_batch_progress.setText("Starting...")
+        
+        worker = run_batch_pipeline(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            method=method,
+            clahe_factor=int(self.spin_up_factor.value()),
+            clip_limit=self.spin_clahe_clip.value(),
+            unsharp_radius=self.spin_unsharp_radius.value(),
+            unsharp_amount=self.spin_unsharp_amount.value(),
+            dl_model_path=self.line_model_path.text().strip() if is_dl else "",
+            container_path=self.line_container.text().strip() if is_dl else "",
+            engine=self.combo_engine.currentText() if is_dl else "Singularity",
+            apply_postprocess=self.chk_postprocess.isChecked() if is_dl else False,
+            cp_model_path=self.line_cp_model.text().strip(),
+            diameter=self.spin_diameter.value(),
+            cellprob_threshold=self.spin_cellprob.value(),
+            flow_threshold=self.spin_flow.value(),
+        )
+        
+        worker.yielded.connect(self._on_batch_progress)
+        worker.errored.connect(self._on_batch_error)
+        worker.start()
+
+    def _on_batch_progress(self, msg):
+        if isinstance(msg, str) and msg.startswith("BATCH_COMPLETE:"):
+            total = msg.split(":")[1]
+            self.btn_run_batch.setText("Run Batch")
+            self.btn_run_batch.setEnabled(True)
+            self.lbl_batch_progress.setText(f"Complete — {total} images processed.")
+            QMessageBox.information(
+                self, "Batch Complete",
+                f"Successfully processed {total} images.\n\n"
+                f"Results saved to:\n{self.line_batch_output.text()}"
+            )
+        else:
+            self.lbl_batch_progress.setText(str(msg))
+
+    def _on_batch_error(self, err):
+        self.btn_run_batch.setText("Run Batch")
+        self.btn_run_batch.setEnabled(True)
+        self.lbl_batch_progress.setText("Error — see details.")
+        QMessageBox.critical(self, "Batch Error", str(err))
 
