@@ -9,26 +9,35 @@
 ![Napari](https://img.shields.io/badge/napari-plugin-orange.svg)
 ![CUDA](https://img.shields.io/badge/CUDA-12.4-76B900.svg?logo=nvidia)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.4-ee4c2c.svg?logo=pytorch)
+![Docker](https://img.shields.io/badge/Docker-supported-2496ED.svg?logo=docker)
+![Singularity](https://img.shields.io/badge/Singularity-supported-1E5F74.svg)
 
-FenestRA is a custom Napari plugin built for the Advanced LSEC AFM Pipeline. It bridges the gap between interactive Napari features, legacy deep-learning upscale repositories via Apptainer, and state-of-the-art Cellpose instance segmentation. 
+FenestRA is a custom Napari plugin built for the Advanced LSEC AFM Pipeline. It bridges the gap between interactive Napari features, legacy deep-learning upscale repositories via containerized backends, and state-of-the-art Cellpose instance segmentation. 
 
 By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated morphological analysis, FenestRA drastically simplifies the workflow of extracting robust physical porosity and fenestration morphology metrics directly from raw `.jpk.qi-image` files.
 
 ---
 
 ## Features
-- **Hub-and-Spoke Deep Learning Architecture:** Run legacy Python 3.8 dependent upscale models asynchronously inside a Singularity container without freezing your modern Napari GUI.
+
+- **Cross-Platform Container Engine:** Seamlessly toggle between **Docker** (Windows / macOS) and **Singularity / Apptainer** (Linux / HPC) directly from the Napari UI. No code changes needed when switching platforms.
+- **Hub-and-Spoke Deep Learning Architecture:** Run legacy Python 3.8 dependent upscale models (HAT, SwinIR) asynchronously inside a container without freezing your modern Napari GUI.
+- **Post-DL Image Enhancement:** Optional CLAHE contrast equalization and Unsharp Masking applied directly to the Deep Learning output to sharpen fenestration edges before segmentation.
 - **Native JPK Ingestion:** Automatically reads native physical scale (`nm / px`) from `.jpk.qi-image` files using AFMReader.
 - **Synchronized 4-Pane Analysis:** Auto-generates a synchronized Napari viewer layout combining Raw, Upsampled, Mask, and Boundary Overlays natively.
-- **Configurable Fallbacks:** Includes high-fidelity Python-based CLAHE and unsharp masking functions when DL inference isn't required.
-- **Sub-cellular Quantification:** Automatically calculates standard metrics + digital-to-physical size translations directly to a `.csv`.
+- **Configurable CPU Fallback:** Includes high-fidelity Python-based CLAHE and unsharp masking functions when DL inference isn't required.
+- **Sub-cellular Quantification:** Automatically calculates standard metrics (area, perimeter, equivalent diameter, eccentricity, porosity) with digital-to-physical size translations directly to `.csv`.
+- **Batch Analysis:** Process an entire folder of `.jpk-qi-image` files in one automated run. Produces a single consolidated `.xlsx` Excel file with metrics from all images, plus individual upsampled TIFFs and Cellpose mask TIFFs.
 
 ---
 
 ## Installation
 
 ### 1. Requirements
-Ensure you have `Apptainer` or `Singularity` installed on your system to run the Super-Resolution container logic.
+- Python 3.10+
+- An NVIDIA GPU with CUDA 12.4 drivers (recommended for DL inference)
+- **Linux:** Apptainer / Singularity
+- **Windows / macOS:** Docker Desktop
 
 ### 2. Create the Host Environment
 Create a clean Anaconda environment optimized for Cellpose targeting CUDA 12.4:
@@ -38,7 +47,7 @@ conda create -n fenestra-env -c conda-forge python=3.10 numpy=1.26.4
 conda activate fenestra-env
 
 # Install base GUI tools, Napari, and core scientific dependencies
-pip install "napari[all]" magicgui qtpy scipy scikit-image pandas tifffile "numpy<2"
+pip install "napari[all]" magicgui qtpy scipy scikit-image pandas tifffile "numpy<2" openpyxl
 
 # Install PyTorch mapped explicitly to CUDA 12.4 to ensure GPU hardware acceleration works
 pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.4.0 torchvision==0.19.0
@@ -85,10 +94,40 @@ sudo apptainer build dl_upsampling.sif containers/dl_upsampling.def
 
 ## Usage
 
+### Single Image Analysis
+
 1. Activate your environment: `conda activate fenestra-env`
 2. Launch napari: `napari`
 3. Navigate to `Plugins > FenestRA Pipeline` to open the widget!
-4. **Step 1:** Load your `*.jpk-qi-image` file.
-5. **Step 2:** Select an upsampling method. If using HAT/SwinIR, pick your Model `.pth` and Singularity `.sif` container and hit Run. Wait for the background thread to finish.
-6. **Step 3:** Setup Cellpose parameters. If using automatic cluster diameter estimation, set Diameter to `0`. Hit Run Cellpose.
-7. **Step 4:** Arrange grid for 4-pane layout reviewing, and click **Quantify Fenestrations** to export your CSV metrics!
+4. **Step 1 — Input Data:** Load your `*.jpk-qi-image` file.
+5. **Step 2 — Upsampling:** Select a method (CLAHE, HAT, or SwinIR). For DL methods, specify the model `.pth`, choose your Engine (Docker or Singularity), and optionally enable **"Apply Post-DL Sharpening"** with adjustable Clip Limit and Unsharp parameters. Hit **Run Upsampling**.
+6. **Step 3 — Segmentation:** Configure Cellpose parameters (Diameter, Cellprob Threshold, Flow Threshold). Optionally load a custom Cellpose model. Hit **Run Cellpose**.
+7. **Step 4 — Layout & Analysis:** Click **Arrange 4-Pane Grid** for a synchronized review of Raw, Upsampled, Mask, and Overlay views. Click **Quantify Fenestrations** to export your CSV metrics.
+
+### Batch Analysis
+
+1. Configure your preferred upsampling method, model paths, and Cellpose parameters using the single-image sections above.
+2. Scroll down to **Section 5 — Batch Analysis**.
+3. Select an **Input Directory** containing your `.jpk-qi-image` files.
+4. Select an **Output Directory** where results will be saved.
+5. Click **Run Batch**. The status label will update in real-time showing progress (e.g., `Processing 3/10: sample.jpk-qi-image`).
+6. When complete, the output directory will contain:
+   - `batch_results.xlsx` — Consolidated Excel file with metrics from all images (with `Image_Name` column).
+   - `<image_name>_upsampled.tif` — Upsampled TIFF for each input image.
+   - `<image_name>_mask.tif` — Cellpose segmentation mask for each input image.
+
+---
+
+## Changelog
+
+### v0.2
+- **Batch Analysis Module:** New Section 5 in the Napari UI for processing entire folders of `.jpk-qi-image` files. Outputs a single consolidated `.xlsx` Excel file with fenestration metrics from all images, plus individual upsampled TIFFs and Cellpose mask TIFFs.
+- **Post-DL Image Enhancement:** Added an optional "Apply Post-DL Sharpening" checkbox that applies CLAHE contrast equalization and Unsharp Masking to the Deep Learning output before Cellpose segmentation.
+- **UI Restructuring:** Separated the Clip Limit / Unsharp Radius / Amount sliders into a shared post-processing group that is dynamically visible for both CLAHE and DL workflows.
+
+### v0.1
+- **Cross-Platform Docker Support:** Added a `Dockerfile` mirroring the Singularity `.def` environment. Users can now toggle between Docker and Singularity engines directly from the Napari UI.
+- **Engine Toggle UI:** New "Engine" dropdown in the Upsampling section. Selecting Docker shows a tag input; selecting Singularity shows a `.sif` file picker.
+- **Container Recipes:** Both `Dockerfile` and `dl_upsampling.def` are now bundled in the `containers/` directory.
+- **Cross-Platform README:** Added installation instructions for Windows, macOS, and Linux users.
+
