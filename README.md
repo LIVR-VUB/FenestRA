@@ -62,8 +62,10 @@ pip install git+https://github.com/AFM-SPM/AFMReader.git
 ```
 
 ### 3. Install FenestRA
-Since FenestRA is now available as a Python package on PyPI, you can install it directly using pip:
+First, clone the repository to your local machine (this is required to download the Docker and Singularity setup files for the next step). Then, install the FenestRA plugin via pip:
 ```bash
+git clone https://github.com/LIVR-VUB/FenestRA.git
+cd FenestRA
 pip install napari-fenestra
 ```
 
