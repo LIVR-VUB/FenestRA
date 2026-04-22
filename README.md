@@ -61,11 +61,9 @@ pip install git+https://github.com/AFM-SPM/AFMReader.git
 ```
 
 ### 3. Install FenestRA
-Clone this repository and install it in "editable" mode:
+Since FenestRA is now available as a Python package on PyPI, you can install it directly using pip:
 ```bash
-git clone https://github.com/LIVR-VUB/FenestRA.git
-cd FenestRA
-pip install -e .
+pip install napari-fenestra
 ```
 
 ### 4. Setup the Deep Learning Backend (Docker vs Singularity)
