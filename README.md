@@ -137,3 +137,16 @@ sudo apptainer build dl_upsampling.sif containers/dl_upsampling.def
 - **Container Recipes:** Both `Dockerfile` and `dl_upsampling.def` are now bundled in the `containers/` directory.
 - **Cross-Platform README:** Added installation instructions for Windows, macOS, and Linux users.
 
+---
+
+## Acknowledgments & Citations
+
+If you use FenestRA in your research, please ensure you properly cite the core technologies that make this pipeline possible:
+
+- **Cellpose** (Instance Segmentation Engine):
+  > Stringer, C., Wang, T., Michaelos, M., & Pachitariu, M. (2021). Cellpose: a generalist algorithm for cellular segmentation. *Nature Methods*, 18(1), 100-106. https://doi.org/10.1038/s41592-020-01018-x
+- **AFMReader** (JPK File Ingestion):
+  > Our native support for `.jpk-qi-image` AFM files is powered by the [AFMReader library](https://github.com/AFM-SPM/AFMReader) maintained by the AFM-SPM community.
+- **HAT / SwinIR** (Generative Deep Learning Models):
+  > Chen, X. et al. (2023). Activating More Pixels in Image Super-Resolution Transformer. (HAT)
+  > Liang, J. et al. (2021). SwinIR: Image Restoration Using Swin Transformer. 
