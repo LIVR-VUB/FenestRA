@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="misc/FenestRA.jpg" alt="FenestRA Logo" width="450"/>
+  <img src="https://raw.githubusercontent.com/LIVR-VUB/FenestRA/main/misc/FenestRA.jpg" alt="FenestRA Logo" width="450"/>
 </p>
 
 # FenestRA
