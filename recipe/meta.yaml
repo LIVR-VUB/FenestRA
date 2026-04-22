@@ -1,0 +1,63 @@
+{% set name = "napari-fenestra" %}
+{% set version = "0.2.1" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/napari_fenestra-{{ version }}.tar.gz
+  sha256: d5540fc94cc957261004b843cfe3d9beb49f077d21af1b594abf0c0b473f657e
+
+build:
+  noarch: python
+  number: 0
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  entry_points:
+    - napari_fenestra = fenestra:napari.yaml
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=42
+    - wheel
+  run:
+    - python >=3.10
+    - numpy >=1.26.0,<2.0.0
+    - magicgui
+    - qtpy
+    - scikit-image
+    - scipy
+    - tifffile
+    - cellpose
+    - pandas
+    - openpyxl
+    - napari
+
+test:
+  imports:
+    - fenestra
+  commands:
+    - pip check
+  requires:
+    - pip
+
+about:
+  home: https://github.com/LIVR-VUB/FenestRA
+  summary: "FenestRA: A Napari plugin for LSEC AFM Super-Resolution & Fenestration Analysis"
+  description: |
+    FenestRA is a Napari plugin for the Advanced LSEC AFM pipeline.
+    It provides DL-based super-resolution upsampling (HAT/SwinIR) via
+    containerized backends (Docker/Apptainer), Cellpose segmentation,
+    post-processing (CLAHE + Unsharp Masking), quantitative fenestration
+    analysis, and a batch processing pipeline with consolidated Excel output.
+  license: BSD-3-Clause
+  license_family: BSD
+  license_file: LICENSE
+  doc_url: https://github.com/LIVR-VUB/FenestRA#readme
+  dev_url: https://github.com/LIVR-VUB/FenestRA
+
+extra:
+  recipe-maintainers:
+    - arka2696
