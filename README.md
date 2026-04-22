@@ -65,6 +65,9 @@ pip install git+https://github.com/AFM-SPM/AFMReader.git
 Since FenestRA is now available as a Python package on PyPI, you can install it directly using pip:
 ```bash
 pip install napari-fenestra
+
+# To update an existing installation to the latest version, run:
+pip install --upgrade napari-fenestra
 ```
 
 ### 4. Setup the Deep Learning Backend (Docker vs Singularity)
