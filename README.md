@@ -62,16 +62,20 @@ pip install git+https://github.com/AFM-SPM/AFMReader.git
 ```
 
 ### 3. Install FenestRA
-First, clone the repository to your local machine (this is required to download the Docker and Singularity setup files for the next step). Then, install the FenestRA plugin via pip:
+Since FenestRA is now available as a Python package on PyPI, you can install it directly using pip:
 ```bash
-git clone https://github.com/LIVR-VUB/FenestRA.git
-cd FenestRA
 pip install napari-fenestra
 ```
 
 ### 4. Setup the Deep Learning Backend (Docker vs Singularity)
 
-FenestRA runs its massive deep learning architectures completely independently from the modern Napari UI. You must compile the container engine based on your Operating System:
+FenestRA runs its massive deep learning architectures completely independently from the modern Napari UI. You must compile the container engine based on your Operating System.
+
+First, clone the repository to download the Docker and Singularity setup files:
+```bash
+git clone https://github.com/LIVR-VUB/FenestRA.git
+cd FenestRA
+```
 
 **For Windows & macOS Users (Docker Desktop):**
 Because Apple and Windows systems cannot securely install Singularity, we use Docker.
