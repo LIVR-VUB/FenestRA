@@ -18,6 +18,10 @@ FenestRA is a custom Napari plugin built for the Advanced LSEC AFM Pipeline. It 
 
 By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated morphological analysis, FenestRA drastically simplifies the workflow of extracting robust physical porosity and fenestration morphology metrics directly from raw `.jpk.qi-image` files.
 
+> [!IMPORTANT]
+> **Pre-Publication Notice**  
+> This repository provides the public codebase and scaffolding for the FenestRA pipeline. The fine-tuned deep learning model weights (specifically for the HAT, SwinIR, and custom Cellpose LSEC segmentation models) are currently kept private. They will be made completely publicly available alongside the peer-reviewed manuscript immediately upon its formal publication.
+
 ---
 
 ## Features
