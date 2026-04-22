@@ -2,9 +2,9 @@ name: napari-fenestra
 display_name: FenestRA
 contributions:
   commands:
-    - id: FenestRA.make_pipeline_widget
+    - id: napari-fenestra.make_pipeline_widget
       python_name: fenestra._widget:FenestraWidget
       title: Open FenestRA Pipeline
   widgets:
-    - command: FenestRA.make_pipeline_widget
+    - command: napari-fenestra.make_pipeline_widget
       display_name: FenestRA Pipeline
