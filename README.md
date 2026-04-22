@@ -157,3 +157,11 @@ If you use FenestRA in your research, please ensure you properly cite the core t
 - **HAT / SwinIR** (Generative Deep Learning Models):
   > Chen, X. et al. (2023). Activating More Pixels in Image Super-Resolution Transformer. (HAT)
   > Liang, J. et al. (2021). SwinIR: Image Restoration Using Swin Transformer. 
+
+---
+
+## Funding
+
+<img align="right" width="220" src="https://raw.githubusercontent.com/LIVR-VUB/FenestRA/main/misc/eu_funded.jpg" alt="Funded by the European Union">
+
+This project has received funding from the European Union’s Horizon research and innovation programme under the Marie Skłodowska-Curie grant agreement No 101119613, as part of the **[ImAge-d MSCA Doctoral network](https://uit.no/research/image-d)**.
