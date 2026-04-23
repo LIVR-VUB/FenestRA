@@ -158,9 +158,8 @@ If you use FenestRA in your research, please ensure you properly cite the core t
   > Chen, X. et al. (2023). Activating More Pixels in Image Super-Resolution Transformer. (HAT)
   > Liang, J. et al. (2021). SwinIR: Image Restoration Using Swin Transformer. 
 
-<hr>
+---
 
-<p align="left">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg" width="50" align="left" style="margin-right: 15px;" alt="EU Flag">
-  <sub>This project has received funding from the European Union’s Horizon research and innovation programme under the Marie Skłodowska-Curie grant agreement No 101119613, as part of the <a href="https://uit.no/research/image-d">ImAge-d MSCA Doctoral network</a>.</sub>
-</p>
+<img src="https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg" width="50" alt="EU Flag"> 
+
+*This project has received funding from the European Union’s Horizon research and innovation programme under the Marie Skłodowska-Curie grant agreement No 101119613, as part of the [ImAge-d MSCA Doctoral network](https://uit.no/research/image-d).*
