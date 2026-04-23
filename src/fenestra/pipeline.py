@@ -12,7 +12,6 @@ import pandas as pd
 from skimage.measure import regionprops, label
 
 import sys
-sys.path.append("/home/arka/Desktop/AFM-Project")
 try:
     from AFMReader.jpk import load_jpk
 except ImportError:
@@ -64,15 +63,12 @@ def run_dl_upsampling(
     engine: str = "Singularity"
 ):
     """Runs the Singularly-contained DL upsampling in the background."""
-    inference_script = "/home/arka/Desktop/AFM-Project/DL_Upsampling/scripts/inference.py"
-    
     if engine.strip().lower() == "singularity":
         cmd = [
             "singularity", "exec", "--nv",
             "--bind", f"{os.path.dirname(temp_in_path)}:/tmp_in",
             "--bind", f"{temp_out_dir}:/tmp_out",
             "--bind", f"{os.path.dirname(model_path)}:/tmp_model",
-            "--bind", "/home/arka/Desktop/AFM-Project/DL_Upsampling:/opt/dl_project",
             container_path,
             "python", "/opt/dl_project/scripts/inference.py",
             "--input", "/tmp_in",
@@ -87,7 +83,6 @@ def run_dl_upsampling(
             "-v", f"{os.path.dirname(temp_in_path)}:/tmp_in",
             "-v", f"{temp_out_dir}:/tmp_out",
             "-v", f"{os.path.dirname(model_path)}:/tmp_model",
-            "-v", "/home/arka/Desktop/AFM-Project/DL_Upsampling:/opt/dl_project",
             container_path,
             "python", "/opt/dl_project/scripts/inference.py",
             "--input", "/tmp_in",
@@ -228,7 +223,6 @@ def run_dl_upsampling_sync(
             "--bind", f"{os.path.dirname(temp_in_path)}:/tmp_in",
             "--bind", f"{temp_out_dir}:/tmp_out",
             "--bind", f"{os.path.dirname(model_path)}:/tmp_model",
-            "--bind", "/home/arka/Desktop/AFM-Project/DL_Upsampling:/opt/dl_project",
             container_path,
             "python", "/opt/dl_project/scripts/inference.py",
             "--input", "/tmp_in",
@@ -243,7 +237,6 @@ def run_dl_upsampling_sync(
             "-v", f"{os.path.dirname(temp_in_path)}:/tmp_in",
             "-v", f"{temp_out_dir}:/tmp_out",
             "-v", f"{os.path.dirname(model_path)}:/tmp_model",
-            "-v", "/home/arka/Desktop/AFM-Project/DL_Upsampling:/opt/dl_project",
             container_path,
             "python", "/opt/dl_project/scripts/inference.py",
             "--input", "/tmp_in",
