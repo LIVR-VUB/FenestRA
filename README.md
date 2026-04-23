@@ -42,8 +42,8 @@ By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated 
 ### 1. Requirements
 - Python 3.10+
 - An NVIDIA GPU with CUDA 12.4 drivers (recommended for DL inference)
-  <br>
-  <span style="color:red">**⚠️ Hardware Compatibility Warning:** FenestRA requires deep learning hardware capable of running modern tensor operations. **Extremely old legacy GPUs based on the Maxwell architecture (Compute Capability 5.2 or earlier, such as the Quadro M4000) physically lack hardware support for BFloat16 (`CUDA_R_16BF`) math.** Running the plugin on these ancient GPUs will cause PyTorch and Cellpose to instantly crash with a `CUBLAS_STATUS_NOT_SUPPORTED` error.</span>
+  > [!CAUTION]
+  > <sub>**Hardware Compatibility Warning:** FenestRA requires deep learning hardware capable of running modern tensor operations. Extremely old legacy GPUs based on the Maxwell architecture (Compute Capability 5.2 or earlier, such as the Quadro M4000) physically lack hardware support for BFloat16 (`CUDA_R_16BF`) math. Running the plugin on these ancient GPUs will cause PyTorch and Cellpose to instantly crash with a `CUBLAS_STATUS_NOT_SUPPORTED` error.</sub>
 - **Linux:** Apptainer / Singularity
 - **Windows / macOS:** Docker Desktop
 
