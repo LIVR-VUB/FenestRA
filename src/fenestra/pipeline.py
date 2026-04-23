@@ -144,7 +144,6 @@ def run_cellpose(image: np.ndarray, model_path: str, diameter: float, cellprob_t
         do_3D=False,
         augment=False,
         tile=True,
-        bf16=False, # Disable BFloat16 for widespread legacy GPU compatibility
     )
     
     import re
