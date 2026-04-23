@@ -63,9 +63,12 @@ def run_dl_upsampling(
     engine: str = "Singularity"
 ):
     """Runs the Singularly-contained DL upsampling in the background."""
+    backend_dir = os.path.join(os.path.dirname(__file__), "backend")
+    
     if engine.strip().lower() == "singularity":
         cmd = [
             "singularity", "exec", "--nv",
+            "--bind", f"{backend_dir}:/opt/dl_project/scripts",
             "--bind", f"{os.path.dirname(temp_in_path)}:/tmp_in",
             "--bind", f"{temp_out_dir}:/tmp_out",
             "--bind", f"{os.path.dirname(model_path)}:/tmp_model",
@@ -80,6 +83,7 @@ def run_dl_upsampling(
     elif engine.strip().lower() == "docker":
         cmd = [
             "docker", "run", "--rm", "--gpus", "all",
+            "-v", f"{backend_dir}:/opt/dl_project/scripts",
             "-v", f"{os.path.dirname(temp_in_path)}:/tmp_in",
             "-v", f"{temp_out_dir}:/tmp_out",
             "-v", f"{os.path.dirname(model_path)}:/tmp_model",
@@ -217,9 +221,12 @@ def run_dl_upsampling_sync(
     """Synchronous DL upsampling — returns the output TIFF path directly."""
     import glob as _glob
 
+    backend_dir = os.path.join(os.path.dirname(__file__), "backend")
+
     if engine.strip().lower() == "singularity":
         cmd = [
             "singularity", "exec", "--nv",
+            "--bind", f"{backend_dir}:/opt/dl_project/scripts",
             "--bind", f"{os.path.dirname(temp_in_path)}:/tmp_in",
             "--bind", f"{temp_out_dir}:/tmp_out",
             "--bind", f"{os.path.dirname(model_path)}:/tmp_model",
@@ -234,6 +241,7 @@ def run_dl_upsampling_sync(
     elif engine.strip().lower() == "docker":
         cmd = [
             "docker", "run", "--rm", "--gpus", "all",
+            "-v", f"{backend_dir}:/opt/dl_project/scripts",
             "-v", f"{os.path.dirname(temp_in_path)}:/tmp_in",
             "-v", f"{temp_out_dir}:/tmp_out",
             "-v", f"{os.path.dirname(model_path)}:/tmp_model",
