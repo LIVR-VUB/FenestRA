@@ -1,0 +1,30 @@
+{#-
+  FenestRA override of Material's copyright partial.
+
+  Adds the LIVR lab mark to the footer, which Material renders on every page. Kept small and
+  low-contrast on purpose: the logo is dark blue on white, and Material's footer is near-black,
+  so it sits on a small white chip rather than as a bare tile. Sizing and opacity live in
+  docs/stylesheets/extra.css under `.fen-lab`.
+-#}
+<div class="md-copyright">
+  <a
+    class="fen-lab"
+    href="https://github.com/LIVR-VUB"
+    title="LIVR, Vrije Universiteit Brussel"
+    rel="noopener"
+  >
+    <img src="{{ base_url }}/assets/livr.png" alt="LIVR" width="128" height="128">
+    <span class="fen-lab__text">LIVR &middot; Vrije Universiteit Brussel</span>
+  </a>
+  {% if config.copyright %}
+    <div class="md-copyright__highlight">
+      {{ config.copyright }}
+    </div>
+  {% endif %}
+  {% if not config.extra.generator == false %}
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  {% endif %}
+</div>

@@ -1,0 +1,196 @@
+/* FenestRA docs — light custom polish on top of Material.
+   Kept intentionally small; the theme does the heavy lifting.
+   Brand colours sampled from misc/FenestRA.jpg:
+     slate  #4e5c65  ("Fenest" wordmark)
+     amber  #df8e0b  ("RA" wordmark, fenestrated mesh) */
+
+:root {
+  --fen-amber:        #df8e0b;  /* the "RA" wordmark and the fenestrated mesh */
+  --fen-amber-light:  #f0a52e;
+  --fen-amber-dark:   #b3710a;
+  --fen-amber-link:   #a06600;  /* 4.8:1 on white, the lightest amber safe for body text */
+  --fen-amber-hover:  #7d5000;  /* 7.0:1, darker than the resting link so hover reads as emphasis */
+  --fen-slate:        #4e5c65;  /* the "Fenest" wordmark, kept for chips and borders */
+  --fen-slate-light:  #6b7b86;
+  --fen-slate-dark:   #37444c;
+}
+
+/* Header and other primary-coloured chrome.
+   `--md-primary-bg-color` must stay dark: white on #df8e0b is 2.6:1 and fails WCAG AA,
+   black on it is 8.0:1. Material's own `amber` palette already flips the foreground to
+   dark, and these overrides keep that while swapping in the exact logo hex. */
+[data-md-color-primary="amber"] {
+  --md-primary-fg-color:        var(--fen-amber);
+  --md-primary-fg-color--light: var(--fen-amber-light);
+  --md-primary-fg-color--dark:  var(--fen-amber-dark);
+  --md-primary-bg-color:        rgba(0, 0, 0, 0.87);
+  --md-primary-bg-color--light: rgba(0, 0, 0, 0.54);
+}
+
+/* Accent drives links, hover states and focus rings. The raw logo amber is only 2.6:1 on
+   white, so light mode uses the darkened variant and dark mode uses the lightened one. */
+[data-md-color-accent="amber"] {
+  --md-accent-fg-color:         var(--fen-amber-link);
+  --md-accent-fg-color--transparent: rgba(160, 102, 0, 0.1);
+  --md-accent-bg-color:         #fff;
+  --md-accent-bg-color--light:  rgba(255, 255, 255, 0.7);
+}
+[data-md-color-scheme="slate"][data-md-color-accent="amber"] {
+  --md-accent-fg-color:         var(--fen-amber-light);
+  --md-accent-fg-color--transparent: rgba(240, 165, 46, 0.1);
+}
+
+/* Body links. */
+.md-typeset a {
+  color: var(--fen-amber-link);
+}
+.md-typeset a:hover,
+.md-typeset a:focus {
+  color: var(--fen-amber-hover);
+}
+[data-md-color-scheme="slate"] .md-typeset a {
+  color: var(--fen-amber-light);
+}
+[data-md-color-scheme="slate"] .md-typeset a:hover,
+[data-md-color-scheme="slate"] .md-typeset a:focus {
+  color: #f7bf63;
+}
+
+/* The header logo is a JPEG with a white background, which reads as a white tile against
+   the amber bar. Multiply blends the white away and leaves the wordmark. */
+.md-header__button.md-logo img {
+  mix-blend-mode: multiply;
+}
+
+/* LIVR lab mark in the footer, present on every page via
+   website/overrides/partials/copyright.html.
+
+   The mark is dark blue on white and Material's footer is near-black, so a bare image
+   would read as a bright tile. It sits on a small white chip instead, held back to 80%
+   opacity so it reads as an attribution rather than a banner. */
+.fen-lab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-right: 0.6em;
+  vertical-align: middle;
+  opacity: 0.8;
+  transition: opacity 125ms;
+}
+.fen-lab:hover,
+.fen-lab:focus {
+  opacity: 1;
+}
+.fen-lab img {
+  width: 24px;
+  height: 24px;
+  display: block;
+  background: #fff;
+  border-radius: 3px;
+  padding: 2px;
+  box-sizing: content-box;
+}
+.fen-lab__text {
+  font-size: 0.68rem;
+  line-height: 1.2;
+  color: var(--md-footer-fg-color--light);
+}
+/* On narrow screens keep the mark and drop the wording. */
+@media screen and (max-width: 44.9375em) {
+  .fen-lab__text {
+    display: none;
+  }
+}
+
+/* Slightly wider content column — these pages have wide parameter tables. */
+.md-grid {
+  max-width: 68rem;
+}
+
+/* Landing-page "cards" grid (uses attr_list + md_in_html). */
+.grid.cards > ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.8rem;
+  padding: 0;
+  margin: 1rem 0;
+  list-style: none;
+}
+.grid.cards > ul > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.35rem;
+  padding: 0.9rem 1rem;
+  transition: border-color 125ms, box-shadow 125ms;
+}
+.grid.cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 0 0.4rem var(--md-default-fg-color--lightest);
+}
+.grid.cards > ul > li > p:first-child {
+  font-weight: 700;
+  margin-top: 0;
+}
+
+/* Zebra-stripe long tables for readability. */
+.md-typeset table:not([class]) tbody tr:nth-child(odd) {
+  background-color: var(--md-default-fg-color--lightest);
+}
+
+/* UI screenshots of the napari dock: give them a frame so the dark panel
+   doesn't bleed into a dark page background, and cap the width so the
+   560 px-wide crops stay 1:1 crisp instead of being upscaled. */
+.md-typeset img[src*="/assets/ui/"] {
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.3rem;
+  max-width: 568px;
+  width: 100%;
+  display: block;
+  margin: 1rem auto;
+}
+/* The full-window overview is wide — let it use the whole column. */
+.md-typeset img[src*="napari-overview"],
+.md-typeset img[src*="panel-full"] {
+  max-width: 100%;
+}
+
+/* Repo / funding logos on the landing and About pages.
+   These MUST be qualified with `.md-typeset img` — the theme ships
+   `.md-typeset img{max-width:100%}` at specificity (0,1,1), which beats a bare
+   `.fen-logo` (0,1,0) and lets the logo fill the whole content column. */
+.md-typeset img.fen-logo {
+  display: block;
+  margin: 1.5rem auto 0.5rem;
+  max-width: 320px;
+  width: 100%;
+  height: auto;
+}
+.md-typeset img.fen-eu-logo {
+  display: block;
+  margin: 1rem 0 0.5rem;
+  max-width: 300px;
+  width: 100%;
+  height: auto;
+}
+
+/* Status chips used at the top of caveat / dev pages via attr_list.
+   e.g.  `Known issue`{ .chip .issue }  */
+.chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.5rem;
+  border-radius: 1rem;
+  color: #fff;
+  background: var(--fen-slate);
+}
+.chip.issue    { background: #c0392b; }
+.chip.caveat   { background: var(--fen-amber); color: #2b2b2b; }
+.chip.verified { background: #2e7d32; }
+.chip.plan     { background: #6b7b86; }
+
+/* Keep numeric parameter tables from wrapping mid-value. */
+.md-typeset table:not([class]) td code {
+  white-space: nowrap;
+}

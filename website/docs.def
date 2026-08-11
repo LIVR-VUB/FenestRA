@@ -1,0 +1,22 @@
+Bootstrap: docker
+From: python:3.12-slim
+
+# Slim, standalone docs builder — NOT the DL/GPU container. CPU-only, ~200 MB.
+# Fully isolated from containers/dl_upsampling.def (torch/CUDA); this image only
+# builds the MkDocs Material handbook that lives in napari_plugin/docs/.
+#
+# Build:  apptainer build website/docs.sif website/docs.def
+# Use:    bash website/serve.sh   |   bash website/build.sh
+
+%files
+    website/requirements-docs.txt /opt/requirements-docs.txt
+
+%post
+    pip install --no-cache-dir -r /opt/requirements-docs.txt
+
+%runscript
+    exec mkdocs "$@"
+
+%labels
+    Purpose FenestRA docs site (MkDocs Material)
+    Stack   python:3.12-slim + mkdocs-material (no CUDA / torch / cellpose)

@@ -1,0 +1,6 @@
+# Docs site (MkDocs) — fully isolated from the napari / cellpose / torch stack.
+# CPU-only. Pin exact versions once the first build is green (pip freeze) for
+# reproducibility.
+mkdocs-material>=9.5
+mkdocs-include-markdown-plugin>=6.0
+pymdown-extensions>=10.7

@@ -6,3 +6,8 @@ __pycache__/
 build/
 dist/
 .DS_Store
+
+# Docs site: build output and the local docs-builder image.
+# Rebuild the image with:  apptainer build website/docs.sif website/docs.def
+site/
+website/docs.sif

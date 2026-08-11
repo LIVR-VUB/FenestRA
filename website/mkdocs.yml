@@ -1,0 +1,129 @@
+site_name: FenestRA
+site_description: >-
+  FenestRA — Fenestration Resolution & Analysis. A napari plugin for deep-learning
+  4x super-resolution and morphometric quantification of liver sinusoidal
+  endothelial cell (LSEC) fenestrations from raw AFM scans.
+docs_dir: ../docs          # content stays in the repo's docs/
+site_dir: ../site          # build output (gitignored)
+use_directory_urls: true
+
+repo_url: https://github.com/LIVR-VUB/FenestRA
+repo_name: LIVR-VUB/FenestRA
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  custom_dir: overrides          # partials/copyright.html adds the LIVR lab mark to every page
+  logo: assets/FenestRA.jpg
+  favicon: assets/FenestRA.jpg
+  features:
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  # `amber` is chosen so Material switches the header foreground to dark automatically
+  # (white on the logo amber is only 2.6:1). The exact hex is overridden in extra.css.
+  palette:
+    - scheme: default
+      primary: amber
+      accent: amber
+      toggle: { icon: material/weather-night, name: Switch to dark }
+    - scheme: slate
+      primary: amber
+      accent: amber
+      toggle: { icon: material/weather-sunny, name: Switch to light }
+
+extra_css:
+  - stylesheets/extra.css
+
+plugins:
+  - search
+  - include-markdown
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - def_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - footnotes
+  - pymdownx.details
+  - pymdownx.highlight: { anchor_linenums: true }
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.keys
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed: { alternate_style: true }
+  - pymdownx.tasklist: { custom_checkbox: true }
+  - pymdownx.arithmatex: { generic: true }
+  - toc: { permalink: true }
+
+# Warn (don't fail) on link issues so `mkdocs build` always succeeds;
+# run `STRICT=1 bash website/build.sh` for a stricter link sweep.
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    absolute_links: ignore
+    unrecognized_links: ignore
+
+copyright: >-
+  FenestRA is BSD-3-Clause licensed. Funded by the European Union under MSCA grant 101119613.
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/LIVR-VUB/FenestRA
+      name: FenestRA on GitHub
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/napari-fenestra/
+      name: napari-fenestra on PyPI
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - install/index.md
+      - 1 - Host environment: install/host-environment.md
+      - 2 - Install FenestRA: install/install-fenestra.md
+      - 3 - Container backend: install/container-backend.md
+      - 4 - Model weights: install/model-weights.md
+      - 5 - Verify the install: install/verify.md
+  - User Guide:
+      - guide/index.md
+      - 1 - Input data: guide/step1-input.md
+      - 2 - Upsampling: guide/step2-upsampling.md
+      - 3 - Segmentation: guide/step3-segmentation.md
+      - 4 - Layout & analysis: guide/step4-analysis.md
+      - 5 - Batch analysis: guide/step5-batch.md
+  - Reference:
+      - reference/index.md
+      - Parameters: reference/parameters.md
+      - Output files: reference/outputs.md
+      - Metrics & units: reference/metrics.md
+  - How It Works:
+      - architecture/index.md
+      - Dataflow: architecture/dataflow.md
+      - Containers: architecture/containers.md
+  - Caveats & Limits:
+      - caveats/index.md
+      - The scale-domain question: caveats/scale-domain.md
+      - Known issues: caveats/known-issues.md
+      - Troubleshooting: caveats/troubleshooting.md
+  - About:
+      - about/changelog.md
+      - Citing FenestRA: about/citing.md
+      - Funding: about/funding.md
