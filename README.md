@@ -38,6 +38,12 @@ By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated 
 
 ## Installation
 
+> [!TIP]
+> These are the condensed steps. The [documentation site](docs/install/index.md) walks through the
+> same install with per-package explanations, a verification checklist, and a troubleshooting page
+> indexed by error message. Build it locally with `bash website/serve.sh` (see
+> [Documentation](#documentation)).
+
 ### 1. Requirements
 - Python 3.10+
 - An NVIDIA GPU with CUDA 12.4 drivers (recommended for DL inference)
@@ -77,9 +83,35 @@ pip install napari-fenestra
 pip install --upgrade napari-fenestra
 ```
 
+> [!IMPORTANT]
+> **Step 2 is not optional.** The published package does not declare `napari`, `AFMReader`, or
+> `torch` in `install_requires`, even though all three are imported at runtime. Installing
+> `napari-fenestra` on its own therefore leaves you with no viewer to dock into and no `.jpk`
+> reader. `AFMReader` is distributed from git rather than PyPI, which is why it cannot be declared
+> as an ordinary dependency. `torch` does arrive indirectly via `cellpose`, but as the default
+> PyPI wheel rather than the CUDA 12.4 build from step 2, so you lose GPU acceleration.
+
 ### 4. Setup the Deep Learning Backend (Docker vs Singularity)
 
 FenestRA runs its massive deep learning architectures completely independently from the modern Napari UI. You must compile the container engine based on your Operating System.
+
+> [!WARNING]
+> **The Docker engine path is currently broken.** `containers/Dockerfile` ends with
+> `ENTRYPOINT ["python"]`, and `pipeline.py` also passes `python` as the first element of the
+> command. Docker concatenates ENTRYPOINT and CMD, so the container tries to run
+> `python python /opt/dl_project/scripts/inference.py` and exits with:
+>
+> ```text
+> can't open file '/opt/python': [Errno 2] No such file or directory
+> ```
+>
+> Either fix works, and only one is needed: set `ENTRYPOINT []` in the Dockerfile and rebuild, or
+> remove the `"python"` element from the Docker argv list in `src/fenestra/pipeline.py` (it appears
+> twice, in the interactive block and the batch block, and both must be changed).
+>
+> The Apptainer / Singularity path is unaffected: `singularity exec` bypasses the container's
+> `%runscript`, so the explicit `python` is required there. That is why the two engines need
+> different argv.
 
 First, clone the repository to download the Docker and Singularity setup files:
 ```bash
@@ -131,6 +163,30 @@ sudo apptainer build dl_upsampling.sif containers/dl_upsampling.def
    - `batch_results.xlsx` — Consolidated Excel file with metrics from all images (with `Image_Name` column).
    - `<image_name>_upsampled.tif` — Upsampled TIFF for each input image.
    - `<image_name>_mask.tif` — Cellpose segmentation mask for each input image.
+
+---
+
+## Documentation
+
+A full handbook lives in [`docs/`](docs/) and builds into a searchable MkDocs Material site
+covering installation, a screenshot-led walkthrough of all five panels, a parameter and output
+reference, the pixel-to-nanometre arithmetic, and the scientific caveats that affect what the
+measurements support.
+
+The site builds inside its own small CPU-only container, fully isolated from the DL/GPU stack:
+
+```bash
+# Build the docs image once (~200 MB, no CUDA or torch)
+apptainer build website/docs.sif website/docs.def
+
+# Live preview at http://127.0.0.1:8000 (local only, nothing is published)
+bash website/serve.sh
+
+# Or render the static site into ./site
+bash website/build.sh
+```
+
+Both `site/` and `website/docs.sif` are gitignored build artefacts.
 
 ---
 
