@@ -197,6 +197,23 @@ Usage from here is identical to the desktop app — see [Usage](#usage).
 > stacks are not bit-for-bit equivalent. Build the reference container
 > (`containers/dl_upsampling.def`, Option B step 4) for anything destined for a manuscript.
 
+### RTX 50-series (Blackwell) GPUs
+
+Building `containers\Dockerfile.allinone.cu128` instead gives you a PyTorch with `sm_120` kernels.
+The standard image has none, so an RTX 5070/5080/5090 is detected, reports as available, and then
+fails on the first kernel with `CUDA error: no kernel image is available for execution on the
+device`.
+
+```bat
+docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
+set FENESTRA_IMAGE=livrvub/fenestra:cu128
+containers\run_fenestra.bat
+```
+
+It is a second full image (~17 GB more). The standard one is untouched; unset `FENESTRA_IMAGE` to
+go back. Full comparison, including which cards each one drops, in
+[All-in-one container](docs/install/all-in-one.md).
+
 ### Screen size
 
 **You normally do not need to set anything.** The desktop resizes itself to your browser window, so

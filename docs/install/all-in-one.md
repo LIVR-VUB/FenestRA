@@ -248,6 +248,57 @@ as it does in the desktop app — follow the [User Guide](../guide/index.md).
         VNC_PASSWORD=something-long containers/run_fenestra.sh
         ```
 
+## RTX 50-series (Blackwell) needs the other recipe
+
+If your GPU is an RTX 5070, 5080, 5090 or another Blackwell card, build
+`containers/Dockerfile.allinone.cu128` instead. The standard image's PyTorch has no kernels for
+those cards, and the failure is late and ugly: the card is detected, `torch.cuda.is_available()`
+returns `True`, and the first kernel launch dies with
+
+```text
+RuntimeError: CUDA error: no kernel image is available for execution on the device
+```
+
+=== "Windows"
+
+    ```bat
+    docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
+    set FENESTRA_IMAGE=livrvub/fenestra:cu128
+    containers\run_fenestra.bat
+    ```
+
+=== "Linux / macOS"
+
+    ```bash
+    docker build -t livrvub/fenestra:cu128 -f containers/Dockerfile.allinone.cu128 .
+    FENESTRA_IMAGE=livrvub/fenestra:cu128 containers/run_fenestra.sh
+    ```
+
+It is a second full image, so budget another ~17 GB. The standard one is untouched, and dropping
+`FENESTRA_IMAGE` switches back.
+
+| | Standard image | `cu128` variant |
+|---|---|---|
+| GPU architectures | `sm_50` … `sm_90` | `sm_70` … `sm_120` |
+| Covers | GTX 10-series through H100 | RTX 20-series through RTX 50-series |
+| Does **not** cover | RTX 50-series | Maxwell, Pascal (GTX 10-series) |
+| GUI PyTorch | 2.4.0 + cu124 | 2.8.0 + cu128 |
+| Backend PyTorch | 2.1.2 | 2.8.0 + cu128 |
+
+Both arch lists were measured with `torch._C._cuda_getArchFlags()`, not assumed.
+
+!!! warning "The cu128 variant is further still from the reference stack"
+
+    The validated backend is torch **1.14**; the standard image is already on 2.1.2, and this one
+    is on 2.8.0. Same architectures, same weights, different kernels. There is a real tension here
+    that cannot be engineered away: a Blackwell card **cannot** run the reference stack, so "use
+    the validated stack" and "use this GPU" are mutually exclusive. If numbers are going into the
+    manuscript, produce them with `containers/dl_upsampling.def` on a card it supports.
+
+    The one-line `basicsr` patch this variant requires is the same correction BasicSR made
+    upstream; it is verified at build time, which then runs a real HAT forward pass so a torch
+    that cannot execute the model fails the build rather than a user's scan.
+
 ## Model weights are not included
 
 The image ships the *architecture*, not the *checkpoints*. Put your `.pth` files in the mounted

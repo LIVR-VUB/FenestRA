@@ -471,6 +471,22 @@ never an exception.** Ranked by how likely a biologist is to publish the wrong n
   `importlib.metadata`; do not add a second literal. The README changelog is hand-maintained.
 - **Adding a runtime import means updating `install_requires`** in `setup.cfg`, or documenting
   in the README why it cannot be declared (as with `napari` and `torch`).
+- **Three container recipes now, and two of them are near-duplicates.**
+  `containers/Dockerfile.allinone.cu128` is `Dockerfile.allinone` with four lines changed: both
+  venvs' torch/torchvision (→ 2.8.0/0.23.0 cu128), the DL venv's numpy ceiling (<1.24 → <2), and a
+  one-line `sed` patching `basicsr/data/degradations.py` — which the newer torchvision makes
+  necessary and which BasicSR itself already fixed upstream. It exists because RTX 50-series cards
+  are **sm_120** and the standard image's torch carries no kernels for them:
+  `torch.cuda.is_available()` is `True`, then the first launch raises
+  `CUDA error: no kernel image is available for execution on the device`.
+  ⚠️ **The two files will drift.** Before editing either, `diff -u containers/Dockerfile.allinone
+  containers/Dockerfile.allinone.cu128` — the diff should stay at those four changes plus the
+  cu128 file's extra build-time assertions.
+  Measured arch flags (`torch._C._cuda_getArchFlags()`, which works with no GPU attached, unlike
+  `torch.cuda.get_arch_list()`):
+  `cu124 → sm_50 sm_60 sm_70 sm_75 sm_80 sm_86 sm_90`;
+  `cu128 → sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120`. So cu128 gains Blackwell and **loses
+  Maxwell and Pascal**.
 - **Two container recipes with different jobs.** `dl_upsampling.def` / `Dockerfile` build the
   **reference stack** (torch 1.14, nvcr 23.01) and are what publication numbers should come from.
   `Dockerfile.allinone` is the **deployment** image (torch 2.1.2, because 1.14 wheels carry no
@@ -547,3 +563,14 @@ Ordered by consequence for a published number, not by effort.
 14. **Decide whether the all-in-one's torch 2.1.2 backend is acceptable for publication**, or
     whether the reference stack needs a modern-GPU port of its own. Right now the honest answer
     is "use the reference container for numbers", which is a documentation fix, not a solution.
+
+    ⚠️ **This got sharper on 2026-09-18.** A user's RTX 5070 cannot run the reference stack *or*
+    the all-in-one image, so `Dockerfile.allinone.cu128` (torch 2.8.0) now exists. The gap between
+    "the stack the method was validated on" and "the stack a current GPU can execute" is now
+    1.14 → 2.8, and it widens with every GPU generation. Someone has to decide whether the
+    reference stack gets re-validated on a modern torch, because telling users to produce
+    publication numbers on hardware that is increasingly hard to buy is not a durable answer.
+
+15. **`opencv-python-headless==4.8.0.74` is yanked on PyPI** ("deprecated, use 4.8.0.76"). Pinned
+    exactly, so pip still installs it, in all three recipes. It works today and a yanked release
+    can be removed at any time, which would break every build at once.
