@@ -44,29 +44,150 @@ By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated 
 > indexed by error message. Build it locally with `bash website/serve.sh` (see
 > [Documentation](#documentation)).
 
-> [!IMPORTANT]
-> **On Windows and macOS, use the all-in-one container instead of the steps below.**
->
-> ```bat
-> git clone https://github.com/LIVR-VUB/FenestRA.git
-> cd FenestRA
-> docker build -t livrvub/fenestra:latest -f containers\Dockerfile.allinone .
-> containers\run_fenestra.bat
-> ```
->
-> Then open <http://localhost:6080>. Docker Desktop is the only thing installed on Windows — no
-> Anaconda, no Qt, no CUDA PyTorch, no Git, and no second container. That removes every Windows
-> failure we have actually been sent: `QtBindingsNotFoundError`, `DLL load failed while importing
-> QtWidgets`, `DLL load failed ... application control policies have blocked this file`, and
-> `Cannot find command 'git'`. Full guide: [All-in-one container](docs/install/all-in-one.md).
->
-> One caveat worth knowing before you publish from it: the bundled backend runs torch 2.1.2 rather
-> than the reference stack's torch 1.14, because torch 1.14 will not start on any GPU newer than
-> sm_86. Numbers destined for a manuscript should come from the reference container
-> (`containers/dl_upsampling.def`). The section below builds that.
+FenestRA installs two ways. Pick one.
 
-The steps below are the **native install** — the right choice on Linux, where Apptainer works
-properly and there is no VNC layer between you and the GPU.
+| | Option A — All-in-one container | Option B — Native install |
+|---|---|---|
+| Best for | **Windows and macOS** | **Linux** |
+| You install | Docker Desktop, nothing else | Anaconda, Qt, CUDA PyTorch, Cellpose, Apptainer |
+| Interface | napari in your web browser | napari as a desktop app |
+| Use it for publication numbers | no — see the note in step 7 | yes |
+
+---
+
+## Option A — All-in-one container (Windows & macOS)
+
+One image holds napari, FenestRA, Cellpose and the super-resolution backend. Nothing Python-shaped
+is installed on your machine, which removes every Windows failure we have actually been sent:
+`QtBindingsNotFoundError`, `DLL load failed while importing QtWidgets`,
+`DLL load failed ... application control policies have blocked this file`, and
+`ERROR: Cannot find command 'git'`.
+
+Full guide, with troubleshooting: **[All-in-one container](docs/install/all-in-one.md)**.
+
+### 1. Install Docker Desktop
+
+Download it from [docker.com](https://www.docker.com/products/docker-desktop/) and install it.
+
+On **Windows**, during setup choose the **WSL 2 backend** (the default). Start Docker Desktop and
+wait until the whale icon in the system tray stops animating.
+
+### 2. For the deep-learning methods, check your GPU
+
+Install a current **NVIDIA driver**. Docker Desktop on Windows exposes the GPU through WSL 2, and
+the launcher passes `--gpus all` for you.
+
+> [!NOTE]
+> Without a working NVIDIA GPU the app still starts. CLAHE (CPU) upsampling works, Cellpose falls
+> back to the CPU and becomes slow, and HAT/SwinIR cannot run. The launcher says so at startup
+> rather than letting you find out from the clock. **macOS has no GPU path at all** — Docker
+> Desktop has no NVIDIA passthrough.
+
+### 3. Get the repository
+
+```bash
+git clone https://github.com/LIVR-VUB/FenestRA.git
+cd FenestRA
+```
+
+Git is needed only for this step, to fetch the recipe. It is not a dependency of the software.
+
+### 4. Build the image, once
+
+**Windows** (Command Prompt, from the `FenestRA` folder):
+
+```bat
+docker build -t livrvub/fenestra:latest -f containers\Dockerfile.allinone .
+```
+
+**Linux / macOS:**
+
+```bash
+docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
+```
+
+This downloads several gigabytes and takes a while. You do it once. Budget about **17 GB of disk**
+for the finished image.
+
+The build fails rather than completes if the Qt plugin cannot load, if `basicsr` cannot be
+imported, if the pinned HAT checkout is wrong, or if the Cellpose weights arrive truncated — so a
+build that succeeds is worth something.
+
+> [!WARNING]
+> **Linux users whose Docker came from snap:** the snap cannot read `/media` or `/mnt` at all, so
+> building from a repository on an external drive fails with `transferring dockerfile: 2B` and
+> `no such file or directory` even though the file is plainly there. Run
+> `sudo snap connect docker:removable-media`, or clone under your home directory.
+
+### 5. Put your files where the app can see them
+
+The launcher creates these two folders on first run and mounts them into the app:
+
+| On your machine | Inside FenestRA | Put here |
+|---|---|---|
+| `%USERPROFILE%\FenestRA\data` (Windows)<br>`~/FenestRA/data` (Linux/macOS) | `/data` | your `.jpk-qi-image` scans; your results |
+| `%USERPROFILE%\FenestRA\models`<br>`~/FenestRA/models` | `/models` | your `.pth` checkpoints |
+
+Anything saved **outside** those two folders lives inside the container and is lost when you close
+it. Save your CSV and batch output under `/data`.
+
+The trained weights are not distributed until the manuscript is published — see
+[Model weights](docs/install/model-weights.md).
+
+### 6. Start it
+
+**Windows:** double-click `containers\run_fenestra.bat`.
+
+**Linux / macOS:**
+
+```bash
+containers/run_fenestra.sh
+```
+
+Leave that window open — it is the app's log, and it prints whether a GPU was found and whether
+`/models` is empty. Closing it, or pressing `Ctrl+C`, shuts FenestRA down.
+
+### 7. Open it in your browser
+
+Go to **<http://localhost:6080>**. napari appears with the FenestRA dock already open, and panel 2
+is preset to the bundled backend — the **Engine** dropdown reads `Local (bundled)` and **DL Model**
+is pre-filled with `/models/best_model_ema.pth`.
+
+![FenestRA running in a browser](docs/assets/ui/all-in-one-desktop.png)
+
+Usage from here is identical to the desktop app — see [Usage](#usage).
+
+> [!CAUTION]
+> The launchers publish the desktop to `127.0.0.1` only, meaning *this machine*. If you change
+> that to `-p 6080:6080`, Docker binds **every** network interface, and anyone on the same office
+> LAN, conference wifi or hotel network can open `http://your-machine:6080` and get a fully
+> interactive session — including a file dialog onto every folder you mounted. VNC carries no
+> encryption, so a password does not fix it. There is no error and no warning; it simply works,
+> for them. Set `VNC_PASSWORD` for a second layer if you like, but the loopback publish is the
+> real control.
+
+> [!IMPORTANT]
+> **Publication numbers should not come from this image.** Its bundled backend runs torch 2.1.2
+> rather than the reference stack's torch 1.14, because torch 1.14 will not start on any GPU newer
+> than sm_86 — no RTX 40-series, no H100. The architectures and weights are identical, but the two
+> stacks are not bit-for-bit equivalent. Build the reference container
+> (`containers/dl_upsampling.def`, Option B step 4) for anything destined for a manuscript.
+
+### Updating
+
+```bash
+git pull
+docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
+```
+
+Unchanged layers are reused, so an update is much faster than the first build.
+
+---
+
+## Option B — Native install (Linux)
+
+The right choice on Linux, where Apptainer works properly and there is no VNC layer between you and
+the GPU. This is also the route that builds the reference stack.
 
 ### 1. Requirements
 - Python 3.10+

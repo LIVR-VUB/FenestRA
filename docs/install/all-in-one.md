@@ -21,7 +21,18 @@ Inside this image, none of them run on Windows at all.
 | CPU-only PyTorch installed by accident | The CUDA build is baked in and checked at build time |
 | Cellpose downloading 1.15 GB on first use | `cpsam` ships inside the image |
 
-## Requirements
+## What you will do
+
+1. [Install Docker Desktop](#step-1-install-docker-desktop)
+2. [Check your GPU](#step-2-check-your-gpu)
+3. [Get the repository](#step-3-get-the-repository)
+4. [Build the image, once](#step-4-build-the-image-once)
+5. [Put your files where the app can see them](#step-5-put-your-files-where-the-app-can-see-them)
+6. [Start it, and open your browser](#step-6-start-it-and-open-your-browser)
+
+Steps 1 to 4 happen once. After that, using FenestRA is step 6 alone.
+
+## Before you start
 
 - **Docker Desktop**, with the **WSL 2 backend** on Windows.
 - **An NVIDIA GPU and a current driver** for the deep-learning methods. Docker Desktop exposes it
@@ -29,31 +40,62 @@ Inside this image, none of them run on Windows at all.
 - **About 17 GB of disk** for the image, plus room for your data. The built image measured
   16.3 GB on 18 September 2026; most of it is two independent CUDA PyTorch stacks that cannot
   share anything, plus the 1.15 GB Cellpose model.
+- **Git**, for step 3 only — to fetch the recipe. It is not a dependency of the software itself.
 
-!!! warning "macOS has no GPU path"
+## Step 1 — Install Docker Desktop
 
-    Docker Desktop for macOS has no NVIDIA passthrough. FenestRA will start and the CLAHE (CPU)
-    upsampling method works, but HAT and SwinIR cannot run and Cellpose falls back to the CPU,
-    which means minutes per image rather than seconds. The launcher says so at startup instead of
-    letting you discover it from the clock.
+Download it from [docker.com](https://www.docker.com/products/docker-desktop/) and install it.
 
-## Build it, once
+On **Windows**, accept the **WSL 2 backend** during setup; it is the default and it is what makes
+GPU passthrough possible. Then start Docker Desktop and wait for the whale icon in the system tray
+to stop animating. Nothing below works until the daemon is actually running.
 
-The image is not on Docker Hub. You build it yourself:
+Confirm it:
+
+```bash
+docker version
+```
+
+## Step 2 — Check your GPU
+
+Install a current **NVIDIA driver** for your card. You do not install CUDA, and you do not install
+PyTorch — both live inside the image.
+
+!!! warning "Without a GPU it still runs, just differently"
+
+    FenestRA starts either way and says which case you are in, at startup, in the launcher window.
+
+    - **CLAHE (CPU)** upsampling works normally.
+    - **Cellpose** falls back to the CPU: minutes per image instead of seconds.
+    - **HAT and SwinIR** cannot run at all.
+
+!!! danger "macOS has no GPU path"
+
+    Docker Desktop for macOS has no NVIDIA passthrough, so `--gpus all` has no hardware to expose.
+    This is a limitation of Docker on macOS, not of FenestRA, and there is no workaround. The CLAHE
+    route works; the deep-learning route does not.
+
+## Step 3 — Get the repository
+
+```bash
+git clone https://github.com/LIVR-VUB/FenestRA.git
+cd FenestRA
+```
+
+## Step 4 — Build the image, once
+
+The image is not on Docker Hub — `docker pull` will not find it. You build it yourself, from the
+recipe you just cloned:
 
 === "Windows"
 
     ```bat
-    git clone https://github.com/LIVR-VUB/FenestRA.git
-    cd FenestRA
     docker build -t livrvub/fenestra:latest -f containers\Dockerfile.allinone .
     ```
 
 === "Linux / macOS"
 
     ```bash
-    git clone https://github.com/LIVR-VUB/FenestRA.git
-    cd FenestRA
     docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
     ```
 
@@ -82,7 +124,36 @@ worth something.
 
     or clone the repository somewhere under your home directory and build from there.
 
-## Run it
+### Updating later
+
+```bash
+git pull
+docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
+```
+
+Unchanged layers are reused, so an update is far quicker than the first build.
+
+## Step 5 — Put your files where the app can see them
+
+The launcher creates two folders on your machine the first time it runs, and mounts them into the
+container:
+
+| On your machine | Inside FenestRA | Put here |
+|---|---|---|
+| `%USERPROFILE%\FenestRA\data` / `~/FenestRA/data` | `/data` | your `.jpk-qi-image` scans, and your results |
+| `%USERPROFILE%\FenestRA\models` / `~/FenestRA/models` | `/models` | your `.pth` checkpoints |
+
+!!! warning "Save your results under /data"
+
+    Anything you save outside those two folders lives inside the container and **disappears when
+    you close it**. When the Quantify or Batch step asks where to save, choose somewhere under
+    `/data`.
+
+You can point the launcher somewhere else by editing the `DATA_DIR` and `MODEL_DIR` lines at the
+top of `run_fenestra.bat`, or by setting `FENESTRA_DATA` and `FENESTRA_MODELS` before running
+`run_fenestra.sh`.
+
+## Step 6 — Start it, and open your browser
 
 === "Windows"
 
@@ -94,23 +165,21 @@ worth something.
     containers/run_fenestra.sh
     ```
 
-Then open **<http://localhost:6080>** in any browser. napari appears with the FenestRA dock
-already open:
+Leave the window it opens alone — that is the application's log. Before napari appears it tells you
+two things that otherwise fail quietly much later: whether a GPU was found, and whether `/models`
+is empty. Closing that window, or pressing ++ctrl+c++ in it, shuts FenestRA down.
+
+Then open **<http://localhost:6080>** in any browser. napari appears with the FenestRA dock already
+open:
 
 ![The FenestRA desktop, served from the container to a browser](../assets/ui/all-in-one-desktop.png)
 
 That screenshot is the real thing, captured from the running image on 18 September 2026 — not a
 mock-up. Note that it shows the CPU-only case: no `.jpk` is loaded and no GPU was attached.
 
-The launcher creates two folders on your machine and mounts them:
-
-| On your machine | Inside FenestRA | For |
-|---|---|---|
-| `%USERPROFILE%\FenestRA\data` / `~/FenestRA/data` | `/data` | your `.jpk-qi-image` scans and your results |
-| `%USERPROFILE%\FenestRA\models` / `~/FenestRA/models` | `/models` | your `.pth` checkpoints |
-
-Anything you save outside those two folders lives inside the container and **disappears when you
-close it**. Save your CSV and your batch output under `/data`.
+Panel 2 is already pointed at the bundled backend: **Engine** reads `Local (bundled)` and
+**DL Model** is pre-filled with `/models/best_model_ema.pth`. From here, everything works exactly
+as it does in the desktop app — follow the [User Guide](../guide/index.md).
 
 !!! danger "Do not publish the port to the network"
 
@@ -122,7 +191,20 @@ close it**. Save your CSV and your batch output under `/data`.
     a file dialog that can browse every folder you mounted. VNC carries no encryption, so a
     password does not fix it either. There is no error and no warning; it simply works, for them.
 
-    Set `VNC_PASSWORD` if you want a second layer, but the loopback publish is the actual control.
+    Set `VNC_PASSWORD` if you want a second layer, but the loopback publish is the actual control:
+
+    === "Windows"
+
+        ```bat
+        set VNC_PASSWORD=something-long
+        containers\run_fenestra.bat
+        ```
+
+    === "Linux / macOS"
+
+        ```bash
+        VNC_PASSWORD=something-long containers/run_fenestra.sh
+        ```
 
 ## Model weights are not included
 
