@@ -1,0 +1,19 @@
+# Git for Windows defaults to core.autocrlf=true, which rewrites checked-out text files to CRLF.
+# entrypoint.sh is COPYed into a Linux image and executed there: with CRLF endings the image
+# builds perfectly and then fails to start, because the kernel looks for an interpreter named
+# "/bin/bash\r". Force LF on everything that runs inside the container.
+* text=auto eol=lf
+
+*.sh      text eol=lf
+*.def     text eol=lf
+Dockerfile*  text eol=lf
+
+# The batch launcher runs on Windows. cmd.exe tolerates LF, but CRLF is what a Windows user
+# expects to see if they open it in Notepad.
+*.bat     text eol=crlf
+
+*.png binary
+*.jpg binary
+*.sif binary
+*.pth binary
+*.tif binary

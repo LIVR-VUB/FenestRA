@@ -28,8 +28,11 @@ MSG
     exit 1
 fi
 
+# Ask Docker to actually satisfy a GPU request rather than inferring from `docker info`. A
+# registered nvidia runtime does not prove the toolkit can fulfil the request, and Docker Desktop
+# does not necessarily report one at all. This costs about a second and is never wrong.
 gpu_flag=()
-if docker info --format '{{.Runtimes}}' 2>/dev/null | grep -qi nvidia; then
+if docker run --rm --gpus all --entrypoint /bin/true "$IMAGE" >/dev/null 2>&1; then
     gpu_flag=(--gpus all)
 else
     cat >&2 <<'MSG'

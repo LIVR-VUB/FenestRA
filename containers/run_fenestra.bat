@@ -34,13 +34,14 @@ if errorlevel 1 (
 docker image inspect "%IMAGE%" >nul 2>&1
 if errorlevel 1 goto :nomimage
 
-REM The NVIDIA container runtime is what makes --gpus all meaningful. Without it
-REM the deep-learning methods cannot run, but CLAHE upsampling still works.
+REM Ask Docker to actually satisfy a GPU request, rather than inferring it from `docker info`.
+REM A registered nvidia runtime does not prove the toolkit can fulfil the request, and Docker
+REM Desktop does not necessarily report one at all. Parsing `docker info` is fragile too:
+REM "{{.Runtimes}}" emits one ~10 KB line, past findstr's 8191-byte limit. This probe starts a
+REM container that runs /bin/true and exits, so it answers the real question. Takes about a second.
+echo Checking GPU access...
 set "GPUFLAG=--gpus all"
-REM Print only the runtime NAMES. "{{.Runtimes}}" emits one ~10 KB line containing every
-REM runtime's full feature JSON, which exceeds findstr's 8191-byte line limit — findstr then
-REM matches nothing and the GPU is silently dropped on a perfectly healthy NVIDIA machine.
-docker info --format "{{range $k,$v := .Runtimes}}{{$k}} {{end}}" 2>nul | findstr /I "nvidia" >nul
+docker run --rm --gpus all --entrypoint /bin/true "%IMAGE%" >nul 2>&1
 if errorlevel 1 goto :nogpu
 goto :launch
 
@@ -90,7 +91,7 @@ exit /b 0
 :nomimage
 echo.
 echo The image "%IMAGE%" is not on this machine.
-echo It is not on Docker Hub either — you build it once, from the repository:
+echo It is not on Docker Hub either  -  you build it once, from the repository:
 echo.
 echo     git clone https://github.com/LIVR-VUB/FenestRA.git
 echo     cd FenestRA
