@@ -77,7 +77,28 @@ PY
 
 if [ -z "$(ls -A /models 2>/dev/null)" ]; then
     echo "NOTE: /models is empty, so HAT and SwinIR have no checkpoint to load."
-    echo "      Mount one:  -v <your model folder>:/models"
+    echo "      Put your .pth there, or point FENESTRA_MODELS at the folder holding it."
+fi
+
+# Say what is actually in /data. "The file dialog is empty" is otherwise indistinguishable from
+# three different causes: the folder is empty, the mount points somewhere unexpected (the launcher
+# creates its default folder if it is missing, so a mistyped path silently mounts an empty one), or
+# the files are there but do not match the dialog's *.jpk / *.jpk-qi-image filter.
+# The trailing `|| var=0` is not decoration: this script runs under `set -euo pipefail`, so a
+# find that exits non-zero (an unreadable mount, an odd filesystem) would abort the whole
+# entrypoint and the app would never start. A diagnostic must never be able to do that.
+scans=$(find /data -maxdepth 1 -type f \( -name '*.jpk' -o -name '*.jpk-qi-image' \) 2>/dev/null | wc -l) || scans=0
+files=$(find /data -maxdepth 1 -type f 2>/dev/null | wc -l) || files=0
+if [ "$scans" -gt 0 ]; then
+    echo "Found $scans scan(s) in /data."
+elif [ "$files" -gt 0 ]; then
+    echo "NOTE: /data holds $files file(s), but none ending .jpk or .jpk-qi-image, so the"
+    echo "      Load JPK dialog will look empty. It filters on those two extensions."
+else
+    echo "NOTE: /data is empty, so the Load JPK dialog will show nothing."
+    echo "      Copy your scans into the folder shown above, or restart with FENESTRA_DATA"
+    echo "      pointing at the folder that already holds them. The folder is mounted live,"
+    echo "      so files copied in now appear immediately - no restart needed."
 fi
 
 cat <<'BANNER'
