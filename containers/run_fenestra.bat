@@ -62,6 +62,9 @@ REM %VAR% as the literal text "%VAR%", so the naive form would hand the containe
 REM of "%VNC_PASSWORD%" and lock the user out of their own desktop.
 set "VNCFLAG="
 if defined VNC_PASSWORD set "VNCFLAG=-e VNC_PASSWORD=%VNC_PASSWORD%"
+REM SCREEN only sets the size the desktop starts at; the browser resizes it on connect.
+set "SCREENFLAG="
+if defined SCREEN set "SCREENFLAG=-e SCREEN=%SCREEN%"
 
 echo.
 echo Starting FenestRA. When the log below says the desktop is ready, open:
@@ -79,7 +82,7 @@ REM to a bare -p 6080:6080: that would expose an unauthenticated remote desktop
 REM of this machine to every other machine on your network.
 docker run --rm --name fenestra %GPUFLAG% ^
   --shm-size=8g ^
-  %VNCFLAG% ^
+  %VNCFLAG% %SCREENFLAG% ^
   -p 127.0.0.1:%PORT%:6080 ^
   -v "%DATA_DIR%":/data ^
   -v "%MODEL_DIR%":/models ^

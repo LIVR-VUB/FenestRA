@@ -5,43 +5,52 @@
 set -euo pipefail
 
 export DISPLAY="${DISPLAY:-:0}"
-SCREEN="${SCREEN:-1600x1000x24}"   # docker run -e SCREEN=1920x1080x24
 
-echo "FenestRA starting. Screen ${SCREEN}."
+# Initial size only. The browser resizes the desktop to its own window on connect, so this is
+# what you see for the first instant and what a client that cannot resize is stuck with.
+# Accepts Xvfb's old WxHxDEPTH form as well as plain WxH.
+SCREEN="${SCREEN:-1920x1080x24}"
+case "$SCREEN" in
+    *x*x*) GEOMETRY="${SCREEN%x*}" ; DEPTH="${SCREEN##*x}" ;;
+    *x*)   GEOMETRY="$SCREEN"      ; DEPTH=24 ;;
+    *)     echo "ERROR: SCREEN must look like 1920x1080 or 1920x1080x24, got '$SCREEN'" >&2
+           exit 1 ;;
+esac
 
-Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp &
+echo "FenestRA starting. Initial screen ${GEOMETRY}, depth ${DEPTH}."
 
-# Poll for readiness rather than sleeping a guessed number of seconds: X usually answers on the
-# first attempt, and a fixed sleep is either too short on a loaded machine or wasted time.
+if [ -n "${VNC_PASSWORD:-}" ]; then
+    # Subshell: a bare `umask 077` would persist for the rest of this script, so every file napari
+    # later writes into /data would come out 0600 and unreadable to the user on the host.
+    # x11vnc's -storepasswd writes the standard VNC password format, which Xvnc reads; there is no
+    # vncpasswd binary in the TigerVNC packages we install.
+    ( umask 077; x11vnc -storepasswd "$VNC_PASSWORD" /tmp/.vncpass >/dev/null 2>&1 )
+    AUTH=(-SecurityTypes VncAuth -PasswordFile /tmp/.vncpass)
+else
+    AUTH=(-SecurityTypes None)
+fi
+
+# Xvnc is the X server AND the VNC server in one process, replacing Xvfb + x11vnc. The reason is
+# resolution: Xvfb has a fixed framebuffer, so the browser could only stretch it. Xvnc implements
+# the RFB SetDesktopSize extension, so the desktop becomes exactly the size of the browser window
+# and stays sharp. -localhost keeps port 5900 inside the container's network namespace.
+Xvnc "$DISPLAY" -geometry "$GEOMETRY" -depth "$DEPTH" -rfbport 5900 -localhost \
+     -AlwaysShared -desktop FenestRA "${AUTH[@]}" >/tmp/xvnc.log 2>&1 &
+
+# Poll for readiness rather than sleeping a guessed number of seconds.
 for _ in $(seq 1 100); do
     xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 && break
     sleep 0.1
 done
 if ! xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
-    echo "ERROR: Xvfb never came up on $DISPLAY" >&2
+    echo "ERROR: Xvnc never came up on $DISPLAY" >&2
+    cat /tmp/xvnc.log >&2
     exit 1
 fi
 
 # Without a window manager, QFileDialog and QMessageBox appear undecorated and cannot be moved,
 # which makes the Load JPK button effectively unusable.
 openbox --sm-disable &
-
-if [ -n "${VNC_PASSWORD:-}" ]; then
-    # Subshell: a bare `umask 077` here would persist for the rest of this script, so every file
-    # napari later writes into /data — every CSV, TIFF and workbook — would come out 0600 and
-    # unreadable to the user's own account on the host.
-    ( umask 077; printf '%s\n' "$VNC_PASSWORD" > /tmp/.vncpass )
-    # rm: makes x11vnc delete the file immediately after reading it.
-    AUTH=(-passwdfile rm:/tmp/.vncpass)
-else
-    AUTH=(-nopw)
-fi
-
-# -forever  keep serving after a browser tab closes; x11vnc's default is to exit
-# -shared   a second tab does not kick the first
-# -localhost port 5900 stays inside the container's network namespace
-x11vnc -display "$DISPLAY" -rfbport 5900 -localhost \
-       -forever -shared -noxdamage -quiet "${AUTH[@]}" &
 
 # This 0.0.0.0 is inside the container, and is required for `docker run -p` to reach it. It is
 # NOT the security boundary. The boundary is the host-side publish, which the launcher scripts

@@ -155,6 +155,9 @@ is pre-filled with `/models/best_model_ema.pth`.
 
 ![FenestRA running in a browser](docs/assets/ui/all-in-one-desktop.png)
 
+The desktop resizes itself to your browser window, so maximising the browser (or pressing `F11`
+for full screen) gives you the full resolution of your monitor with nothing scaled or blurred.
+
 Usage from here is identical to the desktop app — see [Usage](#usage).
 
 > [!CAUTION]

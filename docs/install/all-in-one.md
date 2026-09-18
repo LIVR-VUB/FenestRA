@@ -174,8 +174,9 @@ open:
 
 ![The FenestRA desktop, served from the container to a browser](../assets/ui/all-in-one-desktop.png)
 
-That screenshot is the real thing, captured from the running image on 18 September 2026 — not a
-mock-up. Note that it shows the CPU-only case: no `.jpk` is loaded and no GPU was attached.
+That screenshot is the real thing, captured from the running image on 18 September 2026 at
+2560x1440 — not a mock-up. Note that it shows the CPU-only case: no `.jpk` is loaded and no GPU was
+attached.
 
 Panel 2 is already pointed at the bundled backend: **Engine** reads `Local (bundled)` and
 **DL Model** is pre-filled with `/models/best_model_ema.pth`. From here, everything works exactly
@@ -256,14 +257,32 @@ leak into the deep-learning interpreter.
     bit-for-bit equivalent. **Numbers intended for publication should be produced with the
     reference container**; this image is for getting a working screen in front of a biologist.
 
-## Adjusting the window
+## Resolution
 
-The desktop is a fixed-size X display, scaled to fit your browser. If text looks soft, match it to
-your monitor:
+**The desktop resizes itself to your browser window.** On connect, and again whenever you resize
+the window, the browser asks the X server for a framebuffer of exactly that size, and napari's
+window follows it. Nothing is stretched, so nothing is soft.
+
+To get the most pixels: **maximise the browser window, then press ++f11++ for full screen.** The
+desktop follows immediately. On a HiDPI screen, browser zoom works too — ++ctrl+minus++ gives you
+more desktop at smaller text.
+
+`SCREEN` sets only the size the desktop starts at, before a browser has connected:
 
 ```bash
-docker run ... -e SCREEN=1920x1080x24 livrvub/fenestra:latest
+docker run ... -e SCREEN=2560x1440 livrvub/fenestra:latest
 ```
+
+Both `1920x1080` and the older `1920x1080x24` form are accepted.
+
+!!! info "This changed after the first release of the image"
+
+    The desktop used to be a fixed **1600x1000** framebuffer that noVNC scaled into the browser, so
+    any browser window larger than that showed an upscaled, soft picture, and `SCREEN` was the only
+    remedy. The display server is now TigerVNC's `Xvnc` rather than `Xvfb` + `x11vnc`, because
+    `Xvfb`'s framebuffer cannot be resized after it starts and `Xvnc` implements the RFB
+    `SetDesktopSize` extension. If your desktop is still a fixed size and scales, you are running an
+    image built before that change: rebuild it.
 
 ## When something is wrong
 

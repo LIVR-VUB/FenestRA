@@ -244,10 +244,28 @@ PY
 # ---------------------------------------------------------------------------
 # 5. Desktop
 # ---------------------------------------------------------------------------
+# TigerVNC's Xvnc is both the X server and the VNC server, replacing Xvfb + x11vnc at runtime.
+# Xvfb's framebuffer is fixed at startup, so a browser window larger than it could only ever be
+# given an upscaled, soft picture. Xvnc implements the RFB SetDesktopSize extension, so the desktop
+# becomes exactly the size of the browser window. xvfb stays installed because the build-time Qt
+# smoke test above uses xvfb-run, and x11vnc stays for its -storepasswd utility, which writes the
+# password file Xvnc reads (the TigerVNC packages ship no vncpasswd).
+#
+# Installed here rather than in the apt layer at the top, deliberately: that layer sits above both
+# venvs, so adding one desktop package to it forces a ~9 GB PyTorch reinstall on every rebuild.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      tigervnc-standalone-server \
+    && rm -rf /var/lib/apt/lists/*
+
 # noVNC ships vnc.html, vnc_lite.html and vnc_auto.html but no index.html, so without this a bare
 # http://localhost:6080 serves a directory listing. vnc.html is chosen over vnc_lite.html because
 # it supports clipboard.
-RUN printf '%s' '<!doctype html><meta http-equiv="refresh" content="0;url=vnc.html?autoconnect=1&resize=scale">' \
+# resize=remote, not resize=scale. "scale" keeps a fixed server-side framebuffer and stretches it
+# into the browser, so anything bigger than the framebuffer is upscaled and soft. "remote" asks the
+# X server to become exactly the size of the browser window, so the desktop is always rendered at
+# native resolution. Xvnc accepts that (AcceptSetDesktopSize defaults to 1); Xvfb could not, which
+# is why the display server changed.
+RUN printf '%s' '<!doctype html><meta http-equiv="refresh" content="0;url=vnc.html?autoconnect=1&resize=remote">' \
       > /usr/share/novnc/index.html
 
 COPY containers/entrypoint.sh /usr/local/bin/entrypoint.sh

@@ -53,6 +53,7 @@ echo
 exec docker run --rm --name fenestra "${gpu_flag[@]}" \
     --shm-size=8g \
     -e VNC_PASSWORD="${VNC_PASSWORD:-}" \
+    -e SCREEN="${SCREEN:-}" \
     -p "127.0.0.1:${PORT}:6080" \
     -v "$DATA_DIR:/data" \
     -v "$MODEL_DIR:/models" \
