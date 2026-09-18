@@ -12,6 +12,9 @@ REM
 REM Put your .jpk-qi-image scans in DATA_DIR and your .pth checkpoints in
 REM MODEL_DIR, then double-click this file.
 REM
+REM Or, if your scans live somewhere else already: DRAG THAT FOLDER ONTO THIS
+REM FILE in Explorer. It will be used instead, and nothing needs moving.
+REM
 REM The container can ONLY see the folders mounted below. napari's file dialog
 REM cannot reach anything else on this PC, by design. To work from a different
 REM folder without moving your scans, set FENESTRA_DATA before launching:
@@ -19,6 +22,13 @@ REM
 REM     set FENESTRA_DATA=D:\Microscopy\LSEC
 REM     containers\run_fenestra.bat
 REM ---------------------------------------------------------------------------
+
+REM A folder dragged onto this file, or passed on the command line, wins over everything else:
+REM     containers\run_fenestra.bat D:\Microscopy\LSEC
+REM Dragging a folder onto run_fenestra.bat in Explorer does exactly the same thing. %~1 strips
+REM the quotes Explorer adds around a path containing spaces.
+if not "%~1"=="" set "FENESTRA_DATA=%~1"
+if not "%~2"=="" set "FENESTRA_MODELS=%~2"
 
 if not defined FENESTRA_DATA   set "FENESTRA_DATA=%USERPROFILE%\FenestRA\data"
 if not defined FENESTRA_MODELS set "FENESTRA_MODELS=%USERPROFILE%\FenestRA\models"

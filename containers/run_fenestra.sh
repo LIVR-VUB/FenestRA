@@ -6,8 +6,14 @@
 # anyone who wants the same one-command experience Windows users get.
 set -euo pipefail
 
+# A folder passed on the command line wins over everything else:
+#     containers/run_fenestra.sh /path/to/scans [/path/to/models]
+# Written as `if` rather than `[ ... ] && ...` because this script runs under `set -e`, where a
+# trailing test that evaluates false would abort the launcher.
 DATA_DIR="${FENESTRA_DATA:-$HOME/FenestRA/data}"
 MODEL_DIR="${FENESTRA_MODELS:-$HOME/FenestRA/models}"
+if [ -n "${1:-}" ]; then DATA_DIR="$1"; fi
+if [ -n "${2:-}" ]; then MODEL_DIR="$2"; fi
 IMAGE="${FENESTRA_IMAGE:-livrvub/fenestra:latest}"
 PORT="${FENESTRA_PORT:-6080}"
 

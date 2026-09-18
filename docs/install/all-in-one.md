@@ -184,10 +184,26 @@ mount appears as `/data` inside the app, so the folder's own name does not matte
 
     Double-click `containers\run_fenestra.bat`.
 
+    **If your scans are somewhere else, drag that folder onto `run_fenestra.bat`** in Explorer
+    instead of double-clicking it. That folder becomes `/data`, and nothing needs copying. The
+    same from a Command Prompt:
+
+    ```bat
+    containers\run_fenestra.bat D:\Microscopy\LSEC
+    ```
+
+    An optional second argument sets the checkpoints folder.
+
 === "Linux / macOS"
 
     ```bash
     containers/run_fenestra.sh
+    ```
+
+    Or point it straight at your data, with an optional second argument for the checkpoints:
+
+    ```bash
+    containers/run_fenestra.sh /path/to/scans /path/to/models
     ```
 
 Leave the window it opens alone — that is the application's log. Before napari appears it tells you

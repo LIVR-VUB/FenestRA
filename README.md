@@ -156,6 +156,12 @@ The trained weights are not distributed until the manuscript is published — se
 
 **Windows:** double-click `containers\run_fenestra.bat`.
 
+> [!TIP]
+> **Scans somewhere else? Drag that folder onto `run_fenestra.bat` in Explorer.**
+> It is used instead of the default, and nothing needs moving or copying. The same thing works
+> from a Command Prompt: `containers\run_fenestra.bat D:\Microscopy\LSEC`, with an optional
+> second argument for the checkpoints folder.
+
 **Linux / macOS:**
 
 ```bash
