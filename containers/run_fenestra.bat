@@ -69,6 +69,36 @@ echo   Desktop has no NVIDIA passthrough.
 echo.
 
 :launch
+REM Count the scans on the Windows side, before the container starts. An empty Load JPK dialog
+REM inside the app is indistinguishable from a wrong folder, a wrong extension, or an empty one,
+REM and the launcher is the only place that knows which Windows path is really being mounted.
+set "SCANCOUNT=0"
+for /f %%N in ('dir /b /a-d "%DATA_DIR%\*.jpk" "%DATA_DIR%\*.jpk-qi-image" 2^>nul ^| find /c /v ""') do set "SCANCOUNT=%%N"
+
+if "%SCANCOUNT%"=="0" (
+  echo.
+  echo WARNING: no .jpk or .jpk-qi-image files found in
+  echo     %DATA_DIR%
+  echo.
+  echo   The "Load JPK.qi-image" dialog inside FenestRA will be empty, because that
+  echo   folder is the only place it can look. Two common reasons:
+  echo.
+  echo   1. Your scans are in a different folder. Point FenestRA at it instead of
+  echo      moving them, from this same Command Prompt:
+  echo          set FENESTRA_DATA=D:\path\to\your\scans
+  echo          containers\run_fenestra.bat
+  echo.
+  echo   2. Windows hides file extensions by default, so a file shown as
+  echo      scan.jpk-qi-image may really be scan.jpk-qi-image.txt. Turn on
+  echo      View ^> File name extensions in Explorer and check the real name.
+  echo.
+  echo   The folder is mounted live, so you can also just copy files into it now
+  echo   and they will appear without restarting.
+  echo.
+) else (
+  echo Found %SCANCOUNT% scan^(s^) in %DATA_DIR%
+)
+
 REM Only pass the variable through when it is actually set. cmd.exe leaves an undefined
 REM %VAR% as the literal text "%VAR%", so the naive form would hand the container a password
 REM of "%VNC_PASSWORD%" and lock the user out of their own desktop.
