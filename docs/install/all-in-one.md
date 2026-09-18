@@ -305,6 +305,29 @@ RuntimeError: CUDA error: no kernel image is available for execution on the devi
 It is a second full image, so budget another ~17 GB. The standard one is untouched, and dropping
 `FENESTRA_IMAGE` switches back.
 
+### The complete sequence, confirmed working
+
+Run on Windows 11 with an RTX 5070 on 18 September 2026 — build, GPU passthrough, browser desktop
+and deep-learning upsampling, end to end. Passing the scans folder as an argument avoids a second
+environment variable and behaves identically in both Windows shells:
+
+```powershell
+cd C:\FenestRA
+$env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+.\containers\run_fenestra.bat D:\path\to\your\scans
+```
+
+The launcher then prints its whole pre-flight in three lines:
+
+```text
+Image:            livrvub/fenestra:cu128
+Found 3 scan(s) in D:\path\to\your\scans
+GPU: NVIDIA GeForce RTX 5070 (sm_120, CUDA 12.8)
+```
+
+Right image, right folder, usable GPU. If any one of them is not what you expect, stop there
+rather than finding out mid-scan.
+
 | | Standard image | `cu128` variant |
 |---|---|---|
 | GPU architectures | `sm_50` … `sm_90` | `sm_70` … `sm_120` |

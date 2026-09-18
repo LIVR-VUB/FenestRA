@@ -558,8 +558,28 @@ Ordered by consequence for a published number, not by effort.
     `_build_dl_cmd` and the worker-error contract only, and nothing runs either automatically.
     The round-trip test that would catch item 4 — synthetic image → CLAHE → cellpose stub →
     regionprops → known area — still does not exist.
-13. **Verify the all-in-one image end to end.** New in 0.3.0. Confirm on a real Windows machine
-    that the browser desktop, the GPU passthrough and a full JPK → CSV run all work.
+13. ~~**Verify the all-in-one image end to end.**~~ **Largely done, 2026-09-18**, on Windows 11
+    with an RTX 5070, using the `cu128` variant. Confirmed working by the user: `docker build`,
+    the launcher, GPU passthrough through WSL 2, the browser desktop, loading a `.jpk-qi-image`,
+    and **HAT upsampling running on the GPU**. The known-good invocation, now in the README:
+
+    ```powershell
+    cd C:\FenestRA
+    $env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+    .\containers\run_fenestra.bat D:\path\to\your\scans
+    ```
+
+    ⚠️ Still unconfirmed: a full run through to **Quantify and a written CSV**, and the batch
+    module. Do not record this as fully end-to-end verified until someone has the CSV.
+
+    Three things that cost that user real time, all now fixed, all worth remembering:
+    - **PowerShell is not Command Prompt.** `set FOO=bar` is silently a no-op in PowerShell, which
+      is the Windows 11 default shell. Every Windows instruction must give `$env:FOO = "bar"` too.
+    - **Two images look identical from the outside.** The launcher now prints its tag, because the
+      only other way to tell them apart was spotting a `functional_tensor` path inside a 200-line
+      traceback.
+    - **An empty file dialog has three different causes.** Both launchers now count scans and
+      checkpoints on the host, before starting, and name the exact folder.
 14. **Decide whether the all-in-one's torch 2.1.2 backend is acceptable for publication**, or
     whether the reference stack needs a modern-GPU port of its own. Right now the honest answer
     is "use the reference container for numbers", which is a documentation fix, not a solution.

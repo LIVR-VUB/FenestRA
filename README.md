@@ -234,6 +234,29 @@ containers\run_fenestra.bat
 
 The launcher prints `Image: livrvub/fenestra:cu128` at startup, so you can confirm it took.
 
+#### The complete sequence, confirmed working
+
+Run on Windows 11 with an RTX 5070 on 18 September 2026 — build, GPU passthrough, browser desktop
+and deep-learning upsampling, end to end. Passing the scans folder as an argument avoids needing a
+second environment variable, and works the same in either shell:
+
+```powershell
+cd C:\FenestRA
+$env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+.\containers\run_fenestra.bat D:\path\to\your\scans
+```
+
+Then open <http://localhost:6080>. Expect the launcher to print:
+
+```text
+Image:            livrvub/fenestra:cu128
+Found 3 scan(s) in D:\path\to\your\scans
+GPU: NVIDIA GeForce RTX 5070 (sm_120, CUDA 12.8)
+```
+
+Those three lines are the whole pre-flight: right image, right folder, usable GPU. If any one of
+them is not what you expect, stop there — it is cheaper than finding out mid-scan.
+
 It is a second full image (~17 GB more). The standard one is untouched; unset `FENESTRA_IMAGE` to
 go back. Full comparison, including which cards each one drops, in
 [All-in-one container](docs/install/all-in-one.md).
