@@ -99,6 +99,28 @@ if "%SCANCOUNT%"=="0" (
   echo Found %SCANCOUNT% scan^(s^) in %DATA_DIR%
 )
 
+REM Same check for the checkpoints. A missing .pth is worse than a missing scan: HAT and SwinIR
+REM fail outright, and an unreadable path in the DL Model box makes Cellpose fall back to its own
+REM default model and produce perfectly plausible masks from the wrong network.
+set "MODELCOUNT=0"
+for /f %%N in ('dir /b /a-d "%MODEL_DIR%\*.pth" 2^>nul ^| find /c /v ""') do set "MODELCOUNT=%%N"
+
+if "%MODELCOUNT%"=="0" (
+  echo.
+  echo WARNING: no .pth checkpoint found in
+  echo     %MODEL_DIR%
+  echo.
+  echo   HAT and SwinIR upsampling cannot run without one. CLAHE ^(CPU^) still works.
+  echo   Put your checkpoint there, or point FenestRA at the folder holding it:
+  echo       set FENESTRA_MODELS=D:\path\to\your\models
+  echo       containers\run_fenestra.bat
+  echo.
+  echo   The trained weights are not public yet; they ship with the manuscript.
+  echo.
+) else (
+  echo Found %MODELCOUNT% checkpoint^(s^) in %MODEL_DIR%
+)
+
 REM Only pass the variable through when it is actually set. cmd.exe leaves an undefined
 REM %VAR% as the literal text "%VAR%", so the naive form would hand the container a password
 REM of "%VNC_PASSWORD%" and lock the user out of their own desktop.

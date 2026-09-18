@@ -42,10 +42,35 @@ WARNING: no NVIDIA container runtime found.
 MSG
 fi
 
+# Count what is actually in each folder, on the host, before the container starts. An empty file
+# dialog inside the app is identical whether the folder is empty, the wrong one is mounted, or the
+# filenames do not match -- and only the launcher knows which host path is really being used.
+# `|| var=0` because of `set -euo pipefail`: a find that exits non-zero must not abort the launch.
+scans=$(find "$DATA_DIR" -maxdepth 1 -type f \( -name '*.jpk' -o -name '*.jpk-qi-image' \) 2>/dev/null | wc -l) || scans=0
+models=$(find "$MODEL_DIR" -maxdepth 1 -type f -name '*.pth' 2>/dev/null | wc -l) || models=0
+
 echo
 echo "Open http://localhost:${PORT} once the log says the desktop is ready."
 echo "  scans:       $DATA_DIR  -> /data"
 echo "  checkpoints: $MODEL_DIR -> /models"
+echo
+
+if [ "$scans" -gt 0 ]; then
+    echo "Found $scans scan(s) in $DATA_DIR"
+else
+    echo "WARNING: no .jpk or .jpk-qi-image files in $DATA_DIR"
+    echo "  The Load JPK dialog will be empty. Copy your scans there, or restart with"
+    echo "  FENESTRA_DATA=/path/to/your/scans pointing at the folder that already holds them."
+    echo "  The mount is live, so files copied in now appear without a restart."
+fi
+
+if [ "$models" -gt 0 ]; then
+    echo "Found $models checkpoint(s) in $MODEL_DIR"
+else
+    echo "WARNING: no .pth checkpoint in $MODEL_DIR"
+    echo "  HAT and SwinIR cannot run without one; CLAHE (CPU) still works."
+    echo "  Use FENESTRA_MODELS=/path/to/models, or copy the checkpoint there."
+fi
 echo
 
 # Published to loopback only. Binding 0.0.0.0 would expose an unauthenticated
