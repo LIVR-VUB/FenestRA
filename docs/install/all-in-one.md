@@ -267,13 +267,27 @@ To get the most pixels: **maximise the browser window, then press ++f11++ for fu
 desktop follows immediately. On a HiDPI screen, browser zoom works too — ++ctrl+minus++ gives you
 more desktop at smaller text.
 
-`SCREEN` sets only the size the desktop starts at, before a browser has connected:
+`SCREEN` sets only the size the desktop starts at, before a browser has connected. Set it if that
+first moment matters, or if you are connecting with a VNC client that cannot resize:
 
-```bash
-docker run ... -e SCREEN=2560x1440 livrvub/fenestra:latest
-```
+=== "Windows"
 
-Both `1920x1080` and the older `1920x1080x24` form are accepted.
+    Set it in the same Command Prompt, then start FenestRA from there rather than double-clicking:
+
+    ```bat
+    cd FenestRA
+    set SCREEN=2560x1440
+    containers\run_fenestra.bat
+    ```
+
+=== "Linux / macOS"
+
+    ```bash
+    SCREEN=2560x1440 containers/run_fenestra.sh
+    ```
+
+Both `1920x1080` and the older `1920x1080x24` form are accepted. If you are running `docker run`
+by hand rather than through a launcher, it is `-e SCREEN=2560x1440`.
 
 !!! info "This changed after the first release of the image"
 

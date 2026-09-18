@@ -155,9 +155,6 @@ is pre-filled with `/models/best_model_ema.pth`.
 
 ![FenestRA running in a browser](docs/assets/ui/all-in-one-desktop.png)
 
-The desktop resizes itself to your browser window, so maximising the browser (or pressing `F11`
-for full screen) gives you the full resolution of your monitor with nothing scaled or blurred.
-
 Usage from here is identical to the desktop app — see [Usage](#usage).
 
 > [!CAUTION]
@@ -175,6 +172,38 @@ Usage from here is identical to the desktop app — see [Usage](#usage).
 > than sm_86 — no RTX 40-series, no H100. The architectures and weights are identical, but the two
 > stacks are not bit-for-bit equivalent. Build the reference container
 > (`containers/dl_upsampling.def`, Option B step 4) for anything destined for a manuscript.
+
+### Screen size
+
+**You normally do not need to set anything.** The desktop resizes itself to your browser window, so
+maximising the browser — or pressing `F11` for full screen — already gives you your monitor's full
+resolution, with nothing scaled or blurred. Resize the browser and the desktop follows.
+
+`SCREEN` sets only the size the desktop starts at, before a browser has connected. Set it if that
+first moment matters, or if you are connecting with a VNC client that cannot resize:
+
+**Windows** — set it in the same Command Prompt, then start FenestRA from there rather than
+double-clicking:
+
+```bat
+cd FenestRA
+set SCREEN=2560x1440
+containers\run_fenestra.bat
+```
+
+**Linux / macOS:**
+
+```bash
+SCREEN=2560x1440 containers/run_fenestra.sh
+```
+
+Both `2560x1440` and the older `2560x1440x24` form are accepted. `VNC_PASSWORD` is set the same
+way, if you want a password on the desktop as well as the loopback-only port:
+
+```bat
+set VNC_PASSWORD=something-long
+containers\run_fenestra.bat
+```
 
 ### Updating
 
