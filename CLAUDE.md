@@ -13,7 +13,7 @@ project's HAT/SwinIR checkpoints, segments fenestrations with Cellpose, and expo
 morphology metrics (area, perimeter, equivalent diameter, eccentricity, porosity) to CSV or a
 consolidated XLSX.
 
-Published on PyPI as **`napari-fenestra`** (current 0.2.11), BSD-3, Zenodo DOI
+Published on PyPI as **`napari-fenestra`**, BSD-3, Zenodo DOI
 [10.5281/zenodo.19700659](https://doi.org/10.5281/zenodo.19700659), funded by MSCA
 ImAge-d (grant 101119613). Remote: `https://github.com/LIVR-VUB/FenestRA.git`.
 
@@ -40,8 +40,14 @@ napari_plugin/
 │   ├── entrypoint.sh             — Xvfb → openbox → x11vnc → websockify → napari
 │   ├── fenestra-app.py           — opens napari with the FenestRA dock already docked
 │   └── run_fenestra.{bat,sh}     — one-click launchers, loopback-only port publish
-├── tests/test_dl_cmd.py          — 6 plain asserts over _build_dl_cmd. No framework. Run:
-│                                   python tests/test_dl_cmd.py
+├── tests/                        — 2 files, plain asserts, no framework, nothing runs them:
+│   ├── test_dl_cmd.py            — 6 checks of the three-engine argv contract
+│   └── test_worker_errors.py     — 4 checks that a worker failure still reaches a dialog
+├── docs/                         — 28 pages, the MkDocs source. Content lives here, not in website/
+├── website/                      — mkdocs.yml, build.sh, serve.sh, docs.sif, theme overrides
+├── .dockerignore                 — keeps the build context small; excludes data/ and models/
+├── .gitattributes                — forces LF on *.sh. Without it a Windows clone gives entrypoint.sh
+│                                   CRLF endings and the image builds fine then dies on startup
 ├── misc/                         — FenestRA.jpg logo, eu_funded.jpg
 ├── setup.cfg                     — ALL packaging metadata lives here (setup.py is a 3-line stub)
 ├── pyproject.toml                — build-system only
@@ -60,18 +66,26 @@ returns empty because tags are not fetched by default; `git ls-remote --tags ori
 (`git check-ignore -v` confirms `.gitignore:7:dist/`). They are local build residue. Do not
 "restore" them to git.
 
-## Branches
+## Branches and tags
 
-| Branch | Tip | Meaning |
-|---|---|---|
-| `main` | `edd45c0` 2026-04-23 | current, **in sync with `origin/main`** |
-| `v0.2` | `78e4ea4` 2026-04-22 | frozen release snapshot |
-| `v0.1` | `e4ecfed` 2026-04-18 | frozen release snapshot |
+| Ref | Meaning |
+|---|---|
+| `main` | current. **0.3.0 was fast-forwarded here on 2026-09-18** and it is identical to `Beta` |
+| `Beta` | the 0.3.0 working branch, now identical to `main`. Work continued here rather than on `main` |
+| `v0.2`, `v0.1` | frozen release snapshots. **Do not commit to these** — they are release records |
 
-`v0.1 → v0.2` added the batch module + post-DL sharpening (3 files, +523 lines).
-`v0.2 → main` added the LICENSE, the embedded `backend/inference.py`, and the npe2 name fixes.
-39 commits total, all 2026-04-17 → 2026-04-23. **Do not commit to `v0.1`/`v0.2`** — they are
-release records.
+`v0.1 → v0.2` added the batch module + post-DL sharpening. `v0.2 → 0.2.11` added the LICENSE, the
+embedded `backend/inference.py`, and the npe2 name fixes. `0.2.11 → 0.3.0` is 21 commits,
+66 files, +7518/−132: the all-in-one container, the `Local` engine, the docs site, the first tests.
+
+⚠️ **Tags DO exist**, contrary to what this file said until 2026-09-18: `v0.2.2`, `v0.2.11` and
+`v0.3.0`. A bare `git tag -l` prints nothing because tags are not fetched by default — use
+`git ls-remote --tags origin`.
+
+⚠️ **`main` was missing the all-in-one entirely until 0.3.0 was merged.** For a day, the published
+install instructions told users to `git clone` and then build `containers/Dockerfile.allinone`,
+which did not exist on the default branch. If you ever put container work on a side branch again,
+check what a fresh clone actually gets before the docs describe it.
 
 ## Architecture — hub and spoke
 
@@ -503,6 +517,19 @@ never an exception.** Ranked by how likely a biologist is to publish the wrong n
 - When a fix depends on something in `../DL_Upsampling/`, **read that repo's `CLAUDE.md` first** —
   most of the traps here are already characterised there under different filenames.
 
+## Documentation state
+
+The whole site was audited on 2026-09-18 against the three install paths (conda+pip, all-in-one,
+all-in-one cu128): 28 pages, 67 confirmed defects fixed, 47 refuted. The dominant defect was not
+staleness but **path confusion** — text written when there was one install path, still being read
+by users of three. If you add a fourth path, or change what any path installs, that is the failure
+mode to look for first.
+
+Two checks worth repeating after any docs change:
+- `STRICT=1 bash website/build.sh` — catches broken *page* links.
+- It does **not** catch broken in-page anchors. A retitled heading silently orphans every inbound
+  `#fragment`. Parse `site/**/index.html` for `id="..."` and compare against every `href="...#..."`.
+
 ## Open items (as of 2026-09-18)
 
 Ordered by consequence for a published number, not by effort.
@@ -602,3 +629,21 @@ Ordered by consequence for a published number, not by effort.
 15. **`opencv-python-headless==4.8.0.74` is yanked on PyPI** ("deprecated, use 4.8.0.76"). Pinned
     exactly, so pip still installs it, in all three recipes. It works today and a yanked release
     can be removed at any time, which would break every build at once.
+
+16. **0.3.0 is built and tagged but NOT uploaded to PyPI.** `dist/napari_fenestra-0.3.0{.tar.gz,
+    -py3-none-any.whl}` exist, `twine check` passes on both, and `v0.3.0` points at `779f059`.
+    Until someone runs `twine upload`, `pip install napari-fenestra` still serves **0.2.11**, which
+    has no `Local` engine, no `FenestraError`, the old Cellpose labels and the developer paths —
+    while the documentation describes 0.3.0. The upload was deliberately left to the maintainer:
+    there are no credentials on this machine, and a PyPI version can never be re-uploaded.
+    `twine` lives in the `napari-lsec-afm` conda env, not `fenestra-env`.
+
+17. **The UI screenshots in `docs/assets/ui/` are pre-0.3.0.** `panel-full.png` and
+    `step3-cellpose.png` still show "Leave empty for cyto2" and "Diameter (0=auto)", the two labels
+    corrected in 0.3.0, so the prose and the pictures disagree. Regenerating them needs a built
+    image — the capture method that worked is in the all-in-one image itself:
+    `docker exec -e DISPLAY=:0 <container> /opt/venv-gui/bin/python -c "from PyQt6.QtWidgets import
+    QApplication; a=QApplication([]); QApplication.primaryScreen().grabWindow(0).save('/data/x.png')"`.
+
+18. **The Zenodo DOI in this file and in `docs/about/citing.md` was minted for 0.2.11.** If it is a
+    version DOI rather than a concept DOI it now points at the wrong record. Nobody has checked.
