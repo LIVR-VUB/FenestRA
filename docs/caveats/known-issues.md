@@ -1,5 +1,25 @@
 # Known issues
 
+!!! danger "Read this first if you have an RTX 50-series GPU"
+
+    **An RTX 5060, 5070, 5080, 5090 or any other Blackwell card cannot run the standard image, and
+    the way it fails is designed to waste your time.** Everything installs. The GPU is detected.
+    The startup banner on 0.3.0 and earlier even *confirms* the card by name. Then the first
+    deep-learning run dies, hundreds of lines into a traceback, with:
+
+    ```text
+    RuntimeError: CUDA error: no kernel image is available for execution on the device
+    ```
+
+    Nothing is wrong with your machine, your driver, your Docker install, or your data. The
+    bundled PyTorch simply contains no compiled kernels for your GPU's architecture.
+
+    **Fix:** build `containers/Dockerfile.allinone.cu128` instead, and point the launcher at it.
+    Full instructions: [All-in-one container](../install/all-in-one.md#first-which-of-the-two-recipes).
+
+    Details, and how to tell which image you are running:
+    [issue 13](#13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image).
+
 Verified defects in FenestRA 0.3.0, ordered by how much they can change a published number rather than by how hard they are to fix. Each entry gives what you observe, why it happens, what it does to your data, and a workaround where one exists.
 
 Entries fixed in 0.3.0 are kept rather than deleted, and still describe the old behavior, so that an install of 0.2.11 or earlier remains recognizable from its symptom. Where a label was corrected but the underlying behavior was not, the entry says so explicitly.
@@ -28,6 +48,7 @@ Entries fixed in 0.3.0 are kept rather than deleted, and still describe the old 
 | 10 | [Developer paths were pre-filled in the UI](#10-developer-paths-are-pre-filled-in-the-ui) | Fixed in 0.3.0 |
 | 11 | [The package reported version 0.0.1](#11-the-package-reports-version-001) | Fixed in 0.3.0 |
 | 12 | [The all-in-one image is not the reference DL stack](#12-the-all-in-one-image-is-not-the-reference-dl-stack) | Silent (all-in-one only) |
+| **13** | [**RTX 50-series (Blackwell) GPUs cannot run the standard image**](#13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image) | **Loud, but only after a long detour** |
 
 ---
 
@@ -290,6 +311,111 @@ The divergence is deliberate. The torch 1.13 and 1.14 wheels are compiled for sm
 **Workaround.** Use the Singularity or Docker engine against `dl_upsampling.sif` or the `livrvub/dl-upsampling:latest` image for any run you intend to publish, and treat the all-in-one image as the route for getting a working screen in front of a biologist. Record the engine and the backend stack alongside the checkpoint name in your methods.
 
 ---
+
+## 13. RTX 50-series (Blackwell) GPUs cannot run the standard image
+
+**Severity: loud — but only after a long detour.**
+
+!!! danger "This one cost a real user most of a working day"
+
+    Every individual symptom points somewhere other than the actual cause. The list below is in
+    the order the misdirection actually happens, so that anyone hitting it recognises where they
+    are and stops looking in the wrong place.
+
+**What you observe.** Everything appears to work. `docker build` succeeds. The container starts.
+napari opens in the browser. A `.jpk-qi-image` loads and displays. The launcher prints your GPU by
+name. Then **Run Upsampling** fails, and the dialog contains several hundred lines ending in:
+
+```text
+RuntimeError: CUDA error: no kernel image is available for execution on the device
+CUDA kernel errors might be asynchronously reported at some other API call,
+so the stacktrace below might be incorrect.
+```
+
+Higher up the same output, easy to miss among the deprecation warnings:
+
+```text
+NVIDIA GeForce RTX 5070 with CUDA capability sm_120 is not compatible with the
+current PyTorch installation. The current PyTorch install supports CUDA
+capabilities sm_50 sm_60 sm_70 sm_75 sm_80 sm_86 sm_90.
+```
+
+**Why.** PyTorch ships compiled kernels for a fixed list of GPU architectures. The standard image
+carries torch 2.4.0+cu124 in the GUI environment and torch 2.1.2 in the deep-learning one; both
+were built before Blackwell existed, and stop at `sm_90`. RTX 50-series cards report `sm_120`.
+
+The card is still *visible*: `torch.cuda.is_available()` returns `True`, `torch.cuda.get_device_name()`
+returns the right name, and memory can be allocated. Only an actual kernel launch fails — which is
+why the error arrives at `F.pad` deep inside `inference.py`, rather than at startup where it would
+be obvious.
+
+**What made it expensive.** Four separate things pointed away from the cause:
+
+| Misdirection | Why it looked like something else |
+|---|---|
+| The banner said `GPU: NVIDIA GeForce RTX 5070 (CUDA 12.4)` | FenestRA 0.3.0 only checked `torch.cuda.is_available()`, so it reported a working GPU. Fixed — the banner now compares the card's compute capability against the build's arch list and says plainly when they do not match. |
+| The real warning was buried | PyTorch's own `sm_120 is not compatible` warning appears among `UserWarning` lines about deprecated torchvision modules and `torch.meshgrid`, hundreds of lines above the exception. |
+| Two images look identical from outside | Once a `cu128` image exists, `docker images` shows both and nothing said which one was running. Fixed — the launcher now prints `Image: livrvub/fenestra:cu128` at startup. |
+| `set` does nothing in PowerShell | The documented `set FENESTRA_IMAGE=...` is Command Prompt syntax. In PowerShell — the Windows 11 default — it fails **silently**, so the correct image was built and then never used. Fixed: docs give `$env:FENESTRA_IMAGE = "..."` first. |
+
+**Consequence for your data.** None. This cannot produce a wrong number — the run stops. The cost
+is time, not correctness.
+
+**Which cards are affected.** Ask yours directly:
+
+```bash
+nvidia-smi --query-gpu=name,compute_cap --format=csv
+```
+
+| `compute_cap` | Architecture | Standard image | `cu128` image |
+|---|---|---|---|
+| 12.0 | Blackwell (RTX 5060–5090) | ❌ no kernels | ✅ |
+| 10.0 | Blackwell datacenter (B100, B200) | ❌ no kernels | ✅ |
+| 7.0 – 9.0 | Volta → Hopper (RTX 20/30/40, A100, H100) | ✅ | ✅ |
+| 5.0 – 6.x | Maxwell, Pascal (GTX 900, GTX 10-series) | ✅ | ❌ dropped |
+
+Both arch lists were measured, not assumed, with `torch._C._cuda_getArchFlags()` — which, unlike
+`torch.cuda.get_arch_list()`, reports the compiled list even with no GPU attached:
+
+```text
+cu124 → sm_50 sm_60 sm_70 sm_75 sm_80 sm_86 sm_90
+cu128 → sm_70 sm_75 sm_80 sm_86 sm_90 sm_100 sm_120
+```
+
+**Fix.** Build the Blackwell variant and select it. On Windows, in **one** PowerShell window:
+
+```powershell
+cd C:\FenestRA
+docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
+$env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+.\containers\run_fenestra.bat D:\path\to\your\scans
+```
+
+Confirmed working on Windows 11 with an RTX 5070 on 18 September 2026. The launcher's first three
+lines are the whole pre-flight — if any one is not what you expect, stop there:
+
+```text
+Image:            livrvub/fenestra:cu128
+Found 3 scan(s) in D:\path\to\your\scans
+GPU: NVIDIA GeForce RTX 5070 (sm_120, CUDA 12.8)
+```
+
+**How to check what you are actually running**, since the tag alone is only a label:
+
+```bash
+docker exec fenestra /opt/venv-dl/bin/python -c "import torch; print(torch.__version__, torch._C._cuda_getArchFlags())"
+```
+
+`sm_120` in that output means your card is supported. No `sm_120` means it is not, whatever the
+tag says.
+
+!!! warning "The cu128 image is further from the validated stack"
+
+    The reference backend is torch 1.14; the standard image is 2.1.2; this one is 2.8.0. Same
+    architectures, same weights, different kernels. A Blackwell card **cannot** run the reference
+    container at all, so "reproduce on the validated stack" and "use this GPU" are mutually
+    exclusive. For numbers going into a manuscript, use `containers/dl_upsampling.def` on a card it
+    supports. See [issue 12](#12-the-all-in-one-image-is-not-the-reference-dl-stack).
 
 ## Hardcoded settings that move your numbers
 
