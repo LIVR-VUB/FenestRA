@@ -21,7 +21,7 @@ nanometer.
 | Source repository | [github.com/LIVR-VUB/FenestRA](https://github.com/LIVR-VUB/FenestRA) |
 | napari menu entry | **Plugins → FenestRA Pipeline** |
 | Plugin display name | FenestRA |
-| Python requirement | 3.10 or newer |
+| Python requirement | 3.10, 3.11 or 3.12 (`python_requires = >=3.10,<3.13`) |
 
 !!! note
 

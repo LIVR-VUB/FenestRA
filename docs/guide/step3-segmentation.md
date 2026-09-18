@@ -2,9 +2,11 @@
 
 Finding the fenestrations in the upsampled image with Cellpose, and producing the label mask that everything downstream is measured from. Two of the controls in this panel do not do what their names suggest, so read the Cellpose 4 section before you tune anything. Their labels were corrected in 0.3.0; what they do did not change.
 
-![Panel 3, Cellpose Segmentation](../assets/ui/step3-cellpose.png)
+![Panel 3, Cellpose Segmentation, as it looked up to 0.2.11](../assets/ui/step3-cellpose.png)
 
-Cellpose runs on the host, in your napari environment, on the GPU if one is available. It does not use the container. It segments the `Upsampled AFM` layer, so what gets found depends on which upsampling method you ran.
+*This screenshot is from 0.2.11, so it shows the old labels: `Leave empty for cyto2` and `Diameter (0=auto):`. In 0.3.0 they read `Leave empty for the Cellpose 4 default (cpsam)` and `Diameter (30 = no rescale):`. The behavior is identical.*
+
+Cellpose runs in the same environment as the plugin GUI — the conda environment on a native install (path A), or `/opt/venv-gui` inside the all-in-one image (paths B and C) — on the GPU if one is available. It never runs in the deep-learning backend (the Singularity/Docker container, or `/opt/venv-dl`). Inside the all-in-one image, **CP Model** must be a path the container can see, which means under `/models`. It segments the `Upsampled AFM` layer, so what gets found depends on which upsampling method you ran.
 
 ## The controls
 
@@ -31,7 +33,7 @@ The interface was written against Cellpose 2. The installed version is Cellpose 
 
     The plugin tests whether the path in the field exists on disk (`pipeline.py:224`, `pipeline.py:356`), and when it does not, it constructs `CellposeModel` with no checkpoint, which loads **cpsam**, the Cellpose-SAM default. Up to 0.2.11 it asked for `model_type="cyto2"` at that point; Cellpose 4 accepted the argument, logged "model_type argument is not used in v4.0.1+. Ignoring this argument...", and loaded cpsam anyway. The model you get is the same either way.
 
-    Nothing fails, and nothing distinguishes a deliberate empty box from a mistake. The same fallback catches a mistyped path or a checkpoint that has been moved or renamed: there is no "file not found" dialog and the run continues on cpsam. If you need a specific model, point **CP Model** at its checkpoint file explicitly, then check the napari console, which prints `>>>> loading model <path>` only when a checkpoint is actually loaded.
+    Nothing fails, and the run continues on cpsam; the only notice is a line in the terminal, which prints for a deliberate empty box and a mistyped path alike. The same fallback catches a mistyped path or a checkpoint that has been moved or renamed: there is no "file not found" dialog. If you need a specific model, point **CP Model** at its checkpoint file explicitly, then watch the terminal that started napari — in the all-in-one image (paths B and C), the terminal running `run_fenestra.sh` or `run_fenestra.bat`. A missing or empty path prints `FenestRA: no Cellpose checkpoint found at '<path>'; segmenting with the built-in default model (cpsam).` (`pipeline.py:240-243` and `pipeline.py:365-368`), naming the path that failed. Silence means the checkpoint was found. Do not use cellpose's own `>>>> loading model` line as confirmation: it is an INFO log (`cellpose/models.py:147`) that napari's default `logging.basicConfig(level=WARNING)` suppresses unless you launch with `napari -v`. This is the terminal, not napari's in-app console.
 
 !!! warning "Diameter is a rescale factor, not a size in pixels"
 

@@ -19,6 +19,18 @@ Run both inside the activated environment. If `conda activate fenestra-env` is n
 installs the package somewhere napari will never look, which is the most common reason the widget
 does not appear in the Plugins menu.
 
+**0.3.0 or newer is required.** On 0.2.11 and earlier there is no **Local (bundled)** engine, the
+Cellpose call still passes the `model_type="cyto2"` that Cellpose 4 ignores, and the widget still
+pre-fills developer paths. Check what you got:
+
+```bash
+pip show napari-fenestra
+```
+
+```bash
+python -c "import fenestra; print(fenestra.__version__)"
+```
+
 !!! warning "Step 1 is not optional"
 
     The published package does not declare `napari` or `torch` as dependencies, even though both
@@ -29,12 +41,13 @@ does not appear in the Plugins menu.
     that way is the default PyPI wheel rather than the CUDA 12.4 build step 1 installs, so what a
     bare `pip install` costs you there is GPU acceleration, not PyTorch itself.
 
-    Before 0.3.0 `AFMReader` was missing from the list too, so a bare install could not open a
-    `.jpk-qi-image` at all. It is a declared dependency now and pip pulls it in.
+    From 0.3.0 `AFMReader` and `pySPM<0.6.3` are declared, so pip pulls them in. On 0.2.11 and
+    earlier neither was, and a bare install could not open a `.jpk-qi-image` at all.
 
-??? note "What the package actually declares"
+??? note "What 0.3.0 declares"
 
-    From `setup.cfg`:
+    From `setup.cfg` in the 0.3.0 source tree — `pip show napari-fenestra` reports the metadata of
+    whatever release you actually installed:
 
     ```text
     numpy>=1.26.0,<2.0.0

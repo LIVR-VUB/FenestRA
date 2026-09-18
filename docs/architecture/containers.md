@@ -10,7 +10,7 @@ The Engine dropdown in panel 2 offers three (`_widget.py:37`):
 |---|---|---|---|
 | **Singularity** | a `.sif` image, launched per run | `containers/dl_upsampling.def` | `singularity exec --nv` plus four bind mounts |
 | **Docker** | a local image tag, launched per run | `containers/Dockerfile` | `docker run --rm --gpus all` plus four `-v` mounts |
-| **Local (bundled)** | a second virtual environment on the same filesystem | `containers/Dockerfile.allinone` | a plain subprocess, no mounts |
+| **Local (bundled)** | a second virtual environment on the same filesystem | `containers/Dockerfile.allinone` or `containers/Dockerfile.allinone.cu128` | a plain subprocess, no mounts |
 
 The first two are the reference stack and are unchanged. **Local (bundled)** is new in 0.3.0 and exists for the all-in-one image described below; outside that image it has nothing to run and says so.
 
@@ -56,22 +56,30 @@ git clone https://github.com/XPixelGroup/HAT.git
 
 `containers/Dockerfile.allinone`, new in 0.3.0, puts napari, Qt, the plugin, Cellpose and the super-resolution backend in **one** image and serves the desktop to a browser over noVNC on port 6080. It is the recommended route on Windows and macOS. Build and run instructions are on [The all-in-one container](../install/all-in-one.md); this section only covers what it does to the architecture.
 
+There are two all-in-one recipes. `containers/Dockerfile.allinone` builds `livrvub/fenestra:latest` and covers `sm_50`–`sm_90`; `containers/Dockerfile.allinone.cu128` builds `livrvub/fenestra:cu128`, covers `sm_70`–`sm_120` and is required for RTX 50-series cards, at the cost of dropping Maxwell and Pascal. The launchers pick between them with `FENESTRA_IMAGE`. Which to build, and what each gives up, is in [The two images, compared](../install/all-in-one.md#the-two-images-compared).
+
 The hub and spoke survives, but the spoke stops being a container. You cannot launch a container from inside a container, so the moment the GUI itself is containerised the nested `docker run` has nowhere to go — that is the whole reason the **Local (bundled)** engine exists. The two environments are instead two virtual environments in one filesystem:
+
+The standard image:
 
 | Path | Python | Holds | Used by |
 |---|---|---|---|
 | `/opt/venv-gui` | 3.10 | napari 0.7, PyQt6 6.11.0, torch 2.4/cu124, Cellpose 4.1.1, AFMReader 0.0.7 | napari, the widget, segmentation, quantification |
 | `/opt/venv-dl` | 3.10 | torch 2.1.2, torchvision 0.16.2, basicsr 1.4.2, numpy<1.24, HAT and SwinIR cloned to `/opt` | `inference.py` only |
 
+The `cu128` variant has the same two venvs in the same places, but puts **both** on torch 2.8.0 with torchvision 0.23.0 from the cu128 wheel index, raises the DL venv's ceiling to `numpy<2`, and patches one `basicsr` import with a build-time `sed` (`torchvision.transforms.functional_tensor` → `torchvision.transforms.functional`, `Dockerfile.allinone.cu128:186-190`) because torchvision 0.17 deleted the old module.
+
 Separation is by process, not by container. `_build_dl_cmd` runs `/opt/venv-dl/bin/python` against the *same* `backend/inference.py` file the mounted engines use, and strips `PYTHONPATH` and `PYTHONHOME` from that subprocess's environment (`pipeline.py:134`) so the GUI venv's NumPy and torch cannot leak into the DL interpreter. The image places HAT and SwinIR on the DL interpreter's path with a `.pth` file in its own `site-packages` rather than with `PYTHONPATH`, precisely because `PYTHONPATH` is scrubbed.
 
-!!! warning "The all-in-one image is not the reference stack"
+!!! warning "The all-in-one images are not the reference stack"
 
-    Its DL venv runs **torch 2.1.2 / torchvision 0.16.2**, not the reference stack's **torch 1.14** on `nvcr.io/nvidia/pytorch:23.01-py3`.
+    Neither all-in-one image runs the reference stack's **torch 1.14** on `nvcr.io/nvidia/pytorch:23.01-py3`. The standard image's DL venv is **torch 2.1.2 / torchvision 0.16.2**; the `cu128` variant is **torch 2.8.0 / torchvision 0.23.0** in both venvs. That is a three-way distance, and the `cu128` image is the furthest from what was validated.
 
     The reason is hardware, not preference: the torch 1.13 and 1.14 wheels are compiled for sm_37 through sm_86 with no PTX fallback, so they do not start at all on an RTX 40-series card, an H100, or anything newer. Pinning the reference version would have made the image unusable on most GPUs bought after 2022.
 
-    `containers/dl_upsampling.def` still builds the reference stack and is unchanged. The architectures, the weights and the arithmetic are the same in both, but the two stacks are not bit-for-bit equivalent. **Numbers intended for publication should come from the reference container.**
+    The same argument repeats one generation later. torch 2.1.2 carries no `sm_100`/`sm_120` kernels, so the standard all-in-one image does not start on an RTX 50-series or other Blackwell card either. That is why the `cu128` recipe exists.
+
+    `containers/dl_upsampling.def` still builds the reference stack and is unchanged. The architectures, the weights and the arithmetic are the same in all of them, but the stacks are not bit-for-bit equivalent. **Numbers intended for publication should come from the reference container**, on a card it supports — a Blackwell card cannot run the reference stack at all, so on that hardware the two requirements are mutually exclusive.
 
 ## Bind mounts
 

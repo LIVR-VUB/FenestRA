@@ -80,18 +80,108 @@ This token appears inside a longer CUDA or cuBLAS error raised during the Cellpo
 
 **Cause.** Your GPU has no BFloat16 hardware. Maxwell-generation cards, compute capability 5.2 and below, for example the Quadro M4000, are affected. Cellpose 4 defaults to `use_bfloat16=True` and FenestRA does not override it. That default was briefly disabled and then deliberately restored, to keep the acceleration on cards that do support it. The limitation is documented rather than worked around.
 
-**Fix.** Run Cellpose on a GPU with BFloat16 support, or force it onto the CPU by hiding the GPU before launching napari:
+**Fix, native install.** Run Cellpose on a GPU with BFloat16 support, or force it onto the CPU by hiding the GPU before launching napari:
 
 ```bash
 CUDA_VISIBLE_DEVICES= napari
 ```
 
+In PowerShell, where `set VAR=value` fails silently:
+
+```powershell
+$env:CUDA_VISIBLE_DEVICES = ""
+napari
+```
+
 `pipeline.py:221` and `:354` choose the device from `torch.cuda.is_available()`, so this puts Cellpose on the CPU.
+
+**Fix, all-in-one image.** The launchers forward only `-e VNC_PASSWORD` and `-e SCREEN`
+(`containers/run_fenestra.sh:85-92`, `containers/run_fenestra.bat:158-164`), so there is nothing on
+that command line for this variable to reach. Run `docker run` yourself and leave `--gpus all` off,
+which hides the GPU from everything in the image:
+
+```bash
+docker run --rm --name fenestra --shm-size=8g \
+  -p 127.0.0.1:6080:6080 \
+  -v /path/to/scans:/data -v /path/to/models:/models \
+  livrvub/fenestra:latest
+```
+
+On Windows, write that as one line, or continue it with `^` in Command Prompt and with a backtick in
+PowerShell. Note that this hides the GPU from the deep-learning step as well, so only `CLAHE (CPU)`
+still works in that session. This concerns the standard image only: `Dockerfile.allinone.cu128`
+drops sm_50 and sm_60, so a Maxwell or Pascal card cannot run the cu128 image at all.
 
 !!! warning
     With the Singularity engine the container subprocess inherits the same environment, so the deep-learning step also falls back to CPU and becomes very slow. The Local (bundled) engine behaves the same way: it passes the whole environment through, minus `PYTHONPATH` and `PYTHONHOME` (`pipeline.py:134`). If you need both, run the upsampling step in a session with the GPU visible and the segmentation step in a session without it.
 
     The Docker engine is the exception: `_build_dl_cmd` builds `docker run` with no `-e` flags (`pipeline.py:158-161`), so no host variable is forwarded, and the image sets `ENV CUDA_VISIBLE_DEVICES=0` internally (`containers/Dockerfile:63`). Hiding the GPU from napari therefore does not hide it from a Docker-engine inference run.
+
+## no kernel image is available for execution on the device
+
+```text
+RuntimeError: CUDA error: no kernel image is available for execution on the device
+```
+
+Several hundred lines higher in the same output, among the deprecation warnings:
+
+```text
+NVIDIA GeForce RTX 5070 with CUDA capability sm_120 is not compatible with the
+current PyTorch installation. The current PyTorch install supports CUDA
+capabilities sm_50 sm_60 sm_70 sm_75 sm_80 sm_86 sm_90.
+```
+
+**Cause.** The PyTorch in the image you are running has no compiled kernels for your GPU
+architecture. The standard all-in-one image, `containers/Dockerfile.allinone`, builds for sm_50
+through sm_90; RTX 50-series (Blackwell) cards report sm_120. The card is still visible and
+`torch.cuda.is_available()` returns `True`, so the failure arrives late, at the first kernel launch,
+rather than at startup.
+
+Both environments in the image stop at sm_90, so this reaches you from either step: inside a
+`Container DL Inference failed:` dialog from the deep-learning step (`/opt/venv-dl`, torch 2.1.2),
+or from the Cellpose step (`/opt/venv-gui`, torch 2.4.0+cu124).
+
+A native install hits the same wall for the same reason — the pinned torch 2.4.0+cu124 carries the
+same arch list — and needs a cu128 build of torch rather than the pinned one.
+
+**Fix, all-in-one image.** Build the Blackwell variant and select it with `FENESTRA_IMAGE`:
+
+```bash
+docker build -t livrvub/fenestra:cu128 -f containers/Dockerfile.allinone.cu128 .
+```
+
+Then, in the same window, PowerShell:
+
+```powershell
+$env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+.\containers\run_fenestra.bat D:\path\to\your\scans
+```
+
+Command Prompt:
+
+```bat
+set FENESTRA_IMAGE=livrvub/fenestra:cu128
+containers\run_fenestra.bat D:\path\to\your\scans
+```
+
+bash:
+
+```bash
+export FENESTRA_IMAGE=livrvub/fenestra:cu128
+containers/run_fenestra.sh /path/to/your/scans
+```
+
+`set VAR=value` is Command Prompt syntax. In PowerShell, the Windows 11 default, it fails
+**silently**, so the cu128 image gets built and then never used. The launcher prints the image it is
+about to run before anything else, which is the check:
+
+```text
+Image:            livrvub/fenestra:cu128
+```
+
+The cu128 image drops Maxwell and Pascal (sm_50, sm_60). Which cards each image covers, and how to
+confirm what is actually running, are in
+[Known issues](known-issues.md#13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image).
 
 ## Container DL Inference failed
 
@@ -116,6 +206,7 @@ Raised whenever the inference process exits with a non-zero status, at `pipeline
 
 | Last lines of stderr | Cause | Fix |
 |---|---|---|
+| `CUDA error: no kernel image is available for execution on the device`, with `sm_120 is not compatible` higher up | The image's PyTorch has no kernels for your GPU architecture. RTX 50-series (Blackwell) is sm_120; the standard image stops at sm_90 | Build `containers/Dockerfile.allinone.cu128` and set `FENESTRA_IMAGE`. See the section above. |
 | `can't open file '/opt/python'` | The Docker image predates the ENTRYPOINT fix | Rebuild it. See the next section. |
 | `Error(s) in loading state_dict`, with size mismatches | The checkpoint is a different architecture than the Method dropdown selected, or it uses `embed_dim=96` and `depths=[6]*4`, which the plugin cannot build (`inference.py:47-70`, `strict=True` at `:87`) | Switch the Method to match the checkpoint, or use an `embed_dim=180` checkpoint. See [Known issues](known-issues.md#7-only-embed_dim-180-checkpoints-load). |
 | `ImportError: HAT arch could not be imported` | The container does not have HAT at `/opt/HAT` | Rebuild the container from the recipe in `containers/`. See [Container backend](../install/container-backend.md). |
@@ -188,8 +279,9 @@ New in 0.3.0, raised before anything is launched (`pipeline.py:117-121`) when **
 
 **Cause.** The Local engine runs `inference.py` as a plain subprocess in a second Python
 environment on the same filesystem, rather than inside a container. That environment is built by
-`containers/Dockerfile.allinone` and lives at `/opt/venv-dl/bin/python`, which is what the image
-sets `FENESTRA_DL_PYTHON` to. On a native install nothing is there.
+`containers/Dockerfile.allinone`, or by `containers/Dockerfile.allinone.cu128`, and lives at
+`/opt/venv-dl/bin/python`, which is what both images set `FENESTRA_DL_PYTHON` to. On a native
+install nothing is there.
 
 **Fix.** Choose **Singularity** or **Docker**, which is the right answer on a native install. If
 you did build an equivalent environment yourself, point `FENESTRA_DL_PYTHON` at its interpreter
@@ -197,9 +289,11 @@ before launching napari. See [The all-in-one container](../install/all-in-one.md
 
 !!! warning "The bundled environment is not the reference stack"
 
-    `/opt/venv-dl` runs torch 2.1.2 with torchvision 0.16.2, because the reference stack's torch
-    1.14 wheels carry no PTX and will not start on a GPU newer than sm_86. The validated backend
-    is still `containers/dl_upsampling.def`, torch 1.14 on `nvcr.io/nvidia/pytorch:23.01-py3`, and
+    `/opt/venv-dl` runs torch 2.1.2 with torchvision 0.16.2 in the standard image
+    (`containers/Dockerfile.allinone`), and torch 2.8.0 with torchvision 0.23.0 in the Blackwell
+    image (`containers/Dockerfile.allinone.cu128`). Neither is the reference stack: the torch
+    1.13/1.14 wheels carry no PTX and will not start on a GPU newer than sm_86. The validated
+    backend is still `containers/dl_upsampling.def`, torch 1.14 on `nvcr.io/nvidia/pytorch:23.01-py3`, and
     numbers intended for publication should come from that container rather than from the
     all-in-one image.
 

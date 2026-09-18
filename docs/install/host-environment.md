@@ -1,8 +1,10 @@
 # 1 - Host environment
 
 The conda environment that runs napari, the FenestRA widget, Cellpose, and the JPK reader. This is
-step 2 of the README's installation section, split up here so you can see what each line is for.
-Build it in the order below. The plugin itself is installed in [step 2](install-fenestra.md).
+step 2 of **Option B — Native install (Linux)** in the README, split up here so you can see what
+each line is for. On Windows or macOS, the [all-in-one container](all-in-one.md) replaces this page
+entirely. Build it in the order below. The plugin itself is installed in
+[2 - Install FenestRA](install-fenestra.md).
 
 ## Create the environment
 
@@ -11,8 +13,12 @@ conda create -n fenestra-env -c conda-forge python=3.10 numpy=1.26.4
 conda activate fenestra-env
 ```
 
-Python 3.10 is what the package declares support for (`python_requires = >=3.10`). NumPy is pinned
-to the 1.x series from the start so that conda does not resolve a NumPy 2 build that later pip
+Python 3.10 is what the package declares support for (`python_requires = >=3.10,<3.13`) — 3.13 is
+excluded deliberately, because pySPM 0.6.x declares `<3.13` and NumPy 1.26.4 has no wheels past
+cp312, so pip on 3.13 fails at dependency resolution rather than telling you your Python is too
+new.
+
+NumPy is pinned to the 1.x series from the start so that conda does not resolve a NumPy 2 build that later pip
 installs would have to fight with.
 
 You need `conda activate fenestra-env` in every new terminal before launching napari.
@@ -57,6 +63,31 @@ pip install "numpy==1.26.4" "scipy==1.15.3" "scikit-image==0.25.2" "pandas==2.3.
 pip install --index-url https://download.pytorch.org/whl/cu124 \
             "torch==2.4.0" "torchvision==0.19.0"
 ```
+
+!!! danger "Not for RTX 50-series / Blackwell (sm_120). Check your card first"
+
+    ```bash
+    nvidia-smi --query-gpu=name,compute_cap --format=csv
+    ```
+
+    The cu124 wheels pinned above carry kernels for `sm_50` … `sm_90` only (measured, not assumed:
+    [known issue 13](../caveats/known-issues.md#13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image)).
+    On a compute capability of 10.0 or 12.0 — an RTX 5060/5070/5080/5090, a B100 or a B200 — the
+    card is still *detected*, `torch.cuda.is_available()` still returns `True`, and Cellpose is
+    still constructed with `gpu=True`; the first actual kernel launch then raises
+    `CUDA error: no kernel image is available for execution on the device`.
+
+    Swapping the two lines above for `--index-url https://download.pytorch.org/whl/cu128` with
+    `"torch==2.8.0" "torchvision==0.23.0"` fixes **host-side Cellpose only**. This page's DL
+    backend is the reference container ([Container backend](container-backend.md)), which is torch
+    1.14 with no PTX above `sm_86` and will not start on a Blackwell card at all — so on Blackwell
+    the native install gives you CLAHE and Cellpose, and no DL upsampling. For DL upsampling on
+    such a card the route is the `cu128` all-in-one image:
+    [RTX 50-series and Blackwell: the cu128 image](all-in-one.md#rtx-50-series-and-blackwell-the-cu128-image).
+
+    The compute-capability banner that catches this at startup exists only in the container
+    launcher (`containers/entrypoint.sh`). The native path prints no such warning, which is why the
+    check above is worth running before you install.
 
 Install this **before** Cellpose. Cellpose declares PyTorch as a dependency, so if it goes first
 pip satisfies that from PyPI with the default CPU wheel, and the CUDA build never gets installed.
@@ -115,10 +146,18 @@ imports it.
 ```bash
 python -c "import napari, torch, cellpose, AFMReader; print('ok')"
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+python -c "import torch; print(torch.cuda.get_device_capability(), torch._C._cuda_getArchFlags())"
 ```
 
 The first command should print `ok`. If it raises `ModuleNotFoundError`, the named package did not
 install, and the plugin will fail later in a less obvious place. The second should report a
 `+cu124` build and `True` on a machine with a working NVIDIA driver.
+
+**`True` on its own is not enough.** It only says the driver and the card are visible, not that the
+wheel contains kernels your card can run — on a Blackwell card `is_available()` is `True` and every
+kernel launch still fails. That is what the third command checks: the capability it prints, written
+as `sm_<major><minor>`, must appear in the arch flags beside it. `(8, 6)` against
+`sm_50 sm_60 sm_70 sm_75 sm_80 sm_86 sm_90` is fine; `(12, 0)` against the same list is the
+Blackwell case above, and you should stop here rather than at **Run Upsampling** hours later.
 
 Next: [2 - Install FenestRA](install-fenestra.md).

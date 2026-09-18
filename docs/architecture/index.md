@@ -1,19 +1,23 @@
 # How It Works
 
-FenestRA runs its deep-learning step inside a container instead of inside the napari process. This page explains why that split exists and what crosses the boundary between the two sides.
+FenestRA runs its deep-learning step in a separate Python environment instead of inside the napari process. On the conda install that environment is a container; in the all-in-one images it is a second venv in the same image, reached by the **Local (bundled)** engine, which launches no container. This page explains why that split exists and what crosses the boundary between the two sides.
 
 ## Two environments that never share a process
 
-|  | Host | Container |
+The table below is the conda + separate-container install - the reference stack, built from `containers/dl_upsampling.def` or `containers/Dockerfile`, and the provenance for published numbers.
+
+|  | Host | Reference-stack container |
 |---|---|---|
 | Base | conda `fenestra-env`, Python 3.10 | `nvcr.io/nvidia/pytorch:23.01-py3`, Python 3.8 / torch 1.14 |
 | Holds | napari, Qt, Cellpose 4, AFMReader, torch 2.4 / cu124 | basicsr, HAT, SwinIR (git-cloned to `/opt`), opencv-headless 4.8.0.74, numpy<1.24 |
 | Why | modern GUI stack | basicsr will not coexist with modern numpy and torch |
 
+In the all-in-one images the same process split is two venvs - `/opt/venv-gui` and `/opt/venv-dl` - inside one image built on `nvidia/cuda:12.4.1-runtime-ubuntu22.04`. There is no conda environment and no nvcr base. See [Containers](containers.md).
+
 The reason for the split is a dependency conflict, not a preference. HAT and SwinIR are built on `basicsr`, which relies on NumPy and PyTorch conventions that were removed in later releases. The container pins `numpy<1.24` for exactly that reason. Those pins cannot be satisfied at the same time as the versions napari and Cellpose 4 need, so FenestRA keeps two Pythons and never asks them to agree.
 
 !!! info "The PyTorch 2.4 badge describes the host"
-    The README badge refers to the environment napari and Cellpose run in. Inside the container the version is torch 1.14, and it stays there. Upgrading your host torch does not change what the super-resolution model runs on.
+    The README badge refers to the environment napari and Cellpose run in. Inside the **reference** container (`containers/dl_upsampling.def`, `containers/Dockerfile`) the backend is torch 1.14, and it stays there - upgrading your host torch does not change what the super-resolution model runs on. The all-in-one images are different: their DL venv is torch 2.1.2 (`Dockerfile.allinone:129`) or torch 2.8.0/cu128 for Blackwell (`Dockerfile.allinone.cu128:160`). See [Containers](containers.md).
 
 ## The contact surface
 

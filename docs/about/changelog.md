@@ -13,6 +13,27 @@ Released 18 September 2026, branch `Beta`.
   <http://localhost:6080>. `containers/run_fenestra.bat` and `containers/run_fenestra.sh` start it.
   It is the recommended route on Windows and macOS. See
   [The all-in-one container](../install/all-in-one.md).
+- **Blackwell / RTX 50-series variant.** `containers/Dockerfile.allinone.cu128`, tagged
+  `livrvub/fenestra:cu128`, builds the same single image with both venvs on torch 2.8.0 and
+  torchvision 0.23.0 from the cu128 index, plus a one-line patch to
+  `basicsr/data/degradations.py` (`torchvision.transforms.functional_tensor` to `functional`)
+  that torchvision 0.17 and later require. It covers sm_70 through sm_120 and drops sm_50 and
+  sm_60 (Maxwell, Pascal), so it is required on the RTX 50-series and unusable on the GTX
+  10-series and older. Select it with `FENESTRA_IMAGE=livrvub/fenestra:cu128` (PowerShell:
+  `$env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"`). See
+  [Known issues](../caveats/known-issues.md#13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image).
+- **Launchers take folders as arguments.** `run_fenestra.bat` and `run_fenestra.sh` accept an
+  optional first argument for the data folder and a second for the models folder; on Windows you
+  can drag a folder onto `run_fenestra.bat`. Each falls back to `FENESTRA_DATA` / `FENESTRA_MODELS`
+  and then to `%USERPROFILE%\FenestRA\data` / `models`, and `FENESTRA_IMAGE` and `FENESTRA_PORT`
+  select the image tag and the browser port the same way. On start the launcher checks GPU access,
+  then reports how many scans and how many checkpoints it found, then the image and the two
+  folders (`run_fenestra.sh` prints `image:` in lower case where `run_fenestra.bat` prints
+  `Image:`).
+- **TigerVNC desktop.** `containers/entrypoint.sh` now runs `Xvnc`, which is the X server and the
+  VNC server in one process, instead of Xvfb plus x11vnc. noVNC connects with `resize=remote`, so
+  the desktop follows the size of the browser window; `SCREEN` sets only the initial geometry and
+  defaults to 1920x1080.
 - **Third engine: Local (bundled).** The **Engine** dropdown in the Upsampling panel now offers
   Singularity, Docker and **Local (bundled)**. The local engine runs
   `/opt/venv-dl/bin/python <site-packages>/fenestra/backend/inference.py` as an ordinary
@@ -21,10 +42,10 @@ Released 18 September 2026, branch `Beta`.
   overrides the interpreter, and `PYTHONPATH` and `PYTHONHOME` are stripped from that
   subprocess so the GUI environment cannot leak into it.
 - **One place to build the inference command.** The two byte-for-byte copies of the container
-  argv in `pipeline.py` are gone. `_build_dl_cmd()` (line 76) returns the argv and environment for
-  all three engines, and `_run_dl_inference()` (line 135) is called by both the interactive
-  worker and the batch loop. Before this, a change to a mount or a flag had to be made twice, and
-  the batch path diverged silently if it was not.
+  argv in `pipeline.py` are gone. `_build_dl_cmd()` (`pipeline.py:109`) returns the argv and
+  environment for all three engines, and `_run_dl_inference()` (`pipeline.py:168`) is called by
+  both the interactive worker and the batch loop. Before this, a change to a mount or a flag had
+  to be made twice, and the batch path diverged silently if it was not.
 - **No hardcoded developer paths.** `_widget.py` no longer contains anyone's home directory. The
   **DL Model** box and the Singularity `.sif` box start empty, the Docker tag starts at the
   locally built `livrvub/dl-upsampling:latest`, and `FENESTRA_ENGINE`, `FENESTRA_DL_MODEL`,
@@ -51,18 +72,23 @@ Released 18 September 2026, branch `Beta`.
 - **Docker backend argv fixed.** `containers/Dockerfile` no longer sets `ENTRYPOINT ["python"]`,
   which used to make the argv inside the container `python python .../inference.py` and fail with
   `can't open file '/opt/python'`.
-- **The first tests.** `tests/test_dl_cmd.py` holds six plain-assert checks of `_build_dl_cmd`.
-  There is no test framework and no CI; run it by hand with `python tests/test_dl_cmd.py`. The
+- **The first tests.** `tests/test_dl_cmd.py` holds six plain-assert checks of `_build_dl_cmd`,
+  and `tests/test_worker_errors.py` holds four that `FenestraError` is not a `RuntimeError`
+  subclass and that `@_reporting` converts one. There is no test framework and no CI; run them by
+  hand with `python tests/test_dl_cmd.py` and `python tests/test_worker_errors.py`. The
   repository had no tests before this release.
 
-!!! warning "The all-in-one image is not the reference stack"
+!!! warning "Neither all-in-one image is the reference stack"
 
-    Its bundled deep-learning environment runs torch 2.1.2 with torchvision 0.16.2, not the
-    reference torch 1.14 on `nvcr.io/nvidia/pytorch:23.01-py3`. The reason is hardware: torch
+    0.3.0 ships two all-in-one recipes and neither is the reference stack.
+    `containers/Dockerfile.allinone` runs torch 2.1.2 with torchvision 0.16.2 in `/opt/venv-dl`;
+    `containers/Dockerfile.allinone.cu128` runs torch 2.8.0 with torchvision 0.23.0 in both
+    venvs. The reference stack is torch 1.14 on `nvcr.io/nvidia/pytorch:23.01-py3`, which
+    `containers/dl_upsampling.def` still builds unchanged. The reason is hardware: torch
     1.13 and 1.14 wheels carry no PTX and will not start on any GPU newer than sm_86, which rules
-    out the RTX 40-series and the H100. `containers/dl_upsampling.def` still builds the reference
-    stack and is unchanged. Numbers intended for publication should come from the reference
-    container.
+    out the RTX 40-series and the H100. The standard all-in-one image's own builds stop at sm_90,
+    so anything newer than that needs the cu128 variant. Numbers intended for publication should
+    come from the reference container.
 
 !!! note "Relabelled, not fixed"
 

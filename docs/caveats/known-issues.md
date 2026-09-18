@@ -4,8 +4,9 @@
 
     **An RTX 5060, 5070, 5080, 5090 or any other Blackwell card cannot run the standard image, and
     the way it fails is designed to waste your time.** Everything installs. The GPU is detected.
-    The startup banner on 0.3.0 and earlier even *confirms* the card by name. Then the first
-    deep-learning run dies, hundreds of lines into a traceback, with:
+    An image built before commit `379b170` reports the card as working; an image built from the
+    current repository prints a boxed warning naming your `sm_` level and the build's arch list.
+    Then the first deep-learning run dies, hundreds of lines into a traceback, with:
 
     ```text
     RuntimeError: CUDA error: no kernel image is available for execution on the device
@@ -16,6 +17,10 @@
 
     **Fix:** build `containers/Dockerfile.allinone.cu128` instead, and point the launcher at it.
     Full instructions: [All-in-one container](../install/all-in-one.md#first-which-of-the-two-recipes).
+
+    This applies to the native conda + pip install too. Its pinned torch 2.4.0+cu124 stops at
+    `sm_90`, and the reference DL container is older still, so on a Blackwell card the `cu128`
+    all-in-one image is the only working route.
 
     Details, and how to tell which image you are running:
     [issue 13](#13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image).
@@ -48,7 +53,7 @@ Entries fixed in 0.3.0 are kept rather than deleted, and still describe the old 
 | 10 | [Developer paths were pre-filled in the UI](#10-developer-paths-are-pre-filled-in-the-ui) | Fixed in 0.3.0 |
 | 11 | [The package reported version 0.0.1](#11-the-package-reports-version-001) | Fixed in 0.3.0 |
 | 12 | [The all-in-one image is not the reference DL stack](#12-the-all-in-one-image-is-not-the-reference-dl-stack) | Silent (all-in-one only) |
-| **13** | [**RTX 50-series (Blackwell) GPUs cannot run the standard image**](#13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image) | **Loud, but only after a long detour** |
+| **13** | [**RTX 50-series (Blackwell) GPUs: only the `cu128` all-in-one image works**](#13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image) | **Loud, but only after a long detour** |
 
 ---
 
@@ -58,7 +63,7 @@ Entries fixed in 0.3.0 are kept rather than deleted, and still describe the old 
 
 **What you observe.** The batch run completes and the dialog reports `Successfully processed 24 images.` The workbook `batch_results.xlsx` contains fewer than 24 distinct `Image_Name` values.
 
-**Why.** When `regionprops` finds no objects, `quantify_fenestrations` returns an empty `DataFrame` (`pipeline.py:309`). The batch loop then adds columns to it with `df.insert(0, "Image_Name", base_name)` and `df["Porosity"] = porosity` (`pipeline.py:511-512`), which gives the frame columns but still zero rows. `pd.concat` at `pipeline.py:517` therefore contributes nothing for that image. Verified on pandas 2.2.2.
+**Why.** When `regionprops` finds no objects, `quantify_fenestrations` returns an empty `DataFrame` (`pipeline.py:309`). The batch loop then adds columns to it with `df.insert(0, "Image_Name", base_name)` and `df["Porosity"] = porosity` (`pipeline.py:511-512`), which gives the frame columns but still zero rows. `pd.concat` at `pipeline.py:517` therefore contributes nothing for that image. Verified on pandas 2.3.3, the version pinned for the host environment.
 
 **Consequence for your data.** Your *n* is smaller than the number in the completion dialog, and the shortfall is not reported anywhere. A scan with genuinely zero fenestrations and a scan whose segmentation failed are both absent, and are indistinguishable in the workbook.
 
@@ -118,7 +123,7 @@ for name in ("Upsampled AFM", "Cellpose Masks", "Overlay"):
 
 **Severity:** Loud
 
-**What you observe.** A **DL Error** dialog reading `Background thread error: Container DL Inference failed:` followed by:
+**What you observe.** A **DL Error** dialog reading `Container DL Inference failed:` followed by:
 
 ```text
 python: can't open file '/opt/python': [Errno 2] No such file or directory
@@ -127,6 +132,8 @@ python: can't open file '/opt/python': [Errno 2] No such file or directory
 **Why.** `containers/Dockerfile` used to end with `ENTRYPOINT ["python"]`, while the plugin appends its own `python /opt/dl_project/scripts/inference.py ...` as the command (`pipeline.py:145-152`). Docker concatenates ENTRYPOINT and CMD, so the process inside the container was `python python /opt/dl_project/scripts/inference.py`, and Python treated the literal string `python` as the script path.
 
 **Consequence for your data.** None. Nothing runs.
+
+On 0.2.11 and earlier the same dialog prefixed the message with `Background thread error:`.
 
 **Fix.** The `ENTRYPOINT` line has been removed from the Dockerfile, so an image built from the current repository is correct. Seeing this error means your image was built from an older checkout: `git pull`, then rebuild.
 
@@ -188,7 +195,7 @@ If you do leave the field empty, record `cpsam` in your methods. Read Diameter a
 
 **Severity:** Loud
 
-**What you observe.** `Background thread error: Container DL Inference failed:` followed by a `RuntimeError` from `load_state_dict` listing size mismatches or missing and unexpected keys. On the batch path the same message appears without the `Background thread error:` prefix; both paths raise it from the same place (`pipeline.py:184`).
+**What you observe.** `Container DL Inference failed:` followed by a `RuntimeError` from `load_state_dict` listing size mismatches or missing and unexpected keys. Both the interactive and the batch path raise it from the same place (`pipeline.py:184`) and show identical text. On 0.2.11 and earlier the interactive dialog prefixed this with `Background thread error:`.
 
 **Why.** The architecture is hardcoded, not derived from the checkpoint. Both branches of `build_model` fix `embed_dim=180`, `depths=[6, 6, 6, 6, 6, 6]` and `num_heads=[6, 6, 6, 6, 6, 6]` (`inference.py:47-53` for HAT, `:65-70` for SwinIR), and weights are loaded with `strict=True` (`inference.py:87`). Checkpoints trained with `embed_dim=96` and `depths=[6]*4`, the smaller variants, do not match.
 
@@ -312,7 +319,7 @@ The divergence is deliberate. The torch 1.13 and 1.14 wheels are compiled for sm
 
 ---
 
-## 13. RTX 50-series (Blackwell) GPUs cannot run the standard image
+### 13. RTX 50-series (Blackwell) GPUs: only the `cu128` all-in-one image works { #13-rtx-50-series-blackwell-gpus-cannot-run-the-standard-image }
 
 **Severity: loud — but only after a long detour.**
 
@@ -323,8 +330,8 @@ The divergence is deliberate. The torch 1.13 and 1.14 wheels are compiled for sm
     are and stops looking in the wrong place.
 
 **What you observe.** Everything appears to work. `docker build` succeeds. The container starts.
-napari opens in the browser. A `.jpk-qi-image` loads and displays. The launcher prints your GPU by
-name. Then **Run Upsampling** fails, and the dialog contains several hundred lines ending in:
+napari opens in the browser. A `.jpk-qi-image` loads and displays. The container's startup banner
+prints your GPU by name. Then **Run Upsampling** fails, and the dialog contains several hundred lines ending in:
 
 ```text
 RuntimeError: CUDA error: no kernel image is available for execution on the device
@@ -353,7 +360,7 @@ be obvious.
 
 | Misdirection | Why it looked like something else |
 |---|---|
-| The banner said `GPU: NVIDIA GeForce RTX 5070 (CUDA 12.4)` | FenestRA 0.3.0 only checked `torch.cuda.is_available()`, so it reported a working GPU. Fixed — the banner now compares the card's compute capability against the build's arch list and says plainly when they do not match. |
+| The banner said `GPU: NVIDIA GeForce RTX 5070 (CUDA 12.4)` | Images built before commit `379b170` only checked `torch.cuda.is_available()`, so they reported a working GPU. Fixed — the banner now compares the card's compute capability against the build's arch list and says plainly when they do not match. |
 | The real warning was buried | PyTorch's own `sm_120 is not compatible` warning appears among `UserWarning` lines about deprecated torchvision modules and `torch.meshgrid`, hundreds of lines above the exception. |
 | Two images look identical from outside | Once a `cu128` image exists, `docker images` shows both and nothing said which one was running. Fixed — the launcher now prints `Image: livrvub/fenestra:cu128` at startup. |
 | `set` does nothing in PowerShell | The documented `set FENESTRA_IMAGE=...` is Command Prompt syntax. In PowerShell — the Windows 11 default — it fails **silently**, so the correct image was built and then never used. Fixed: docs give `$env:FENESTRA_IMAGE = "..."` first. |
@@ -367,12 +374,20 @@ is time, not correctness.
 nvidia-smi --query-gpu=name,compute_cap --format=csv
 ```
 
-| `compute_cap` | Architecture | Standard image | `cu128` image |
-|---|---|---|---|
-| 12.0 | Blackwell (RTX 5060–5090) | ❌ no kernels | ✅ |
-| 10.0 | Blackwell datacenter (B100, B200) | ❌ no kernels | ✅ |
-| 7.0 – 9.0 | Volta → Hopper (RTX 20/30/40, A100, H100) | ✅ | ✅ |
-| 5.0 – 6.x | Maxwell, Pascal (GTX 900, GTX 10-series) | ✅ | ❌ dropped |
+| `compute_cap` | Architecture | Native install (torch 2.4.0+cu124) | Reference DL container (torch 1.14) | Standard all-in-one image | `cu128` all-in-one image |
+|---|---|---|---|---|---|
+| 12.0 | Blackwell (RTX 5060–5090) | ❌ no kernels | ❌ no kernels | ❌ no kernels | ✅ |
+| 10.0 | Blackwell datacenter (B100, B200) | ❌ no kernels | ❌ no kernels | ❌ no kernels | ✅ |
+| 7.0 – 9.0 | Volta → Hopper (RTX 20/30/40, A100, H100) | ✅ | ✅ up to 8.6 only | ✅ | ✅ |
+| 5.0 – 6.x | Maxwell, Pascal (GTX 900, GTX 10-series) | ✅ | ✅ | ✅ | ❌ dropped |
+
+The native install column is the host environment pinned in
+[Host environment](../install/host-environment.md): torch 2.4.0+cu124, whose arch list is the same
+`sm_50`–`sm_90` as the standard image. The reference DL container (`containers/dl_upsampling.def`,
+`containers/Dockerfile`) is torch 1.14, which carries no PTX above `sm_86` — see
+[issue 12](#12-the-all-in-one-image-is-not-the-reference-dl-stack). So on a Blackwell card the
+`cu128` all-in-one image is the only route that works at all: the native conda + pip install and
+both reference container recipes are excluded.
 
 Both arch lists were measured, not assumed, with `torch._C._cuda_getArchFlags()` — which, unlike
 `torch.cuda.get_arch_list()`, reports the compiled list even with no GPU attached:
@@ -391,14 +406,26 @@ $env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
 .\containers\run_fenestra.bat D:\path\to\your\scans
 ```
 
-Confirmed working on Windows 11 with an RTX 5070 on 18 September 2026. The launcher's first three
-lines are the whole pre-flight — if any one is not what you expect, stop there:
+Confirmed working on Windows 11 with an RTX 5070 on 18 September 2026. The pre-flight arrives in
+two stages. The launcher prints, in this order:
 
 ```text
-Image:            livrvub/fenestra:cu128
+Checking GPU access...
 Found 3 scan(s) in D:\path\to\your\scans
+Found 1 checkpoint(s) in D:\path\to\your\models
+Image:            livrvub/fenestra:cu128
+```
+
+Then the container starts and prints its own banner — this takes a few seconds, and longer on the
+first run:
+
+```text
 GPU: NVIDIA GeForce RTX 5070 (sm_120, CUDA 12.8)
 ```
+
+`sm_120` there is the confirmation that the `cu128` image is doing its job. If the wrong image is
+running you get the boxed `WARNING: ... reports sm_120, which this PyTorch build cannot run` block
+instead. If any of these is not what you expect, stop and fix it before loading a scan.
 
 **How to check what you are actually running**, since the tag alone is only a label:
 
@@ -428,10 +455,11 @@ These are not defects, but they are fixed in the source, not exposed in the inte
 
 ## Almost no automated tests
 
-Since 0.3.0 the repository contains exactly one test file, `tests/test_dl_cmd.py`: six plain-assert checks that the three engines agree on the deep-learning command that `_build_dl_cmd` produces. There is no test framework and no continuous integration. Run it by hand in the host environment:
+Since 0.3.0 the repository contains two test files, both plain asserts: `tests/test_dl_cmd.py`, six checks that the three engines agree on the deep-learning command that `_build_dl_cmd` produces, and `tests/test_worker_errors.py`, four checks that `FenestraError` is not a `RuntimeError` subclass and that the `_reporting` decorator converts one — superqt swallows a `RuntimeError` raised inside a `@thread_worker` generator, producing no dialog at all. There is no test framework and no continuous integration, and neither file runs automatically. Run both by hand in the host environment:
 
 ```bash
 python tests/test_dl_cmd.py
+python tests/test_worker_errors.py
 ```
 
 Nothing covers loading, upsampling, segmentation, quantification or the interface. A behavioral change in any of those is not caught by anything other than a person looking at the output.

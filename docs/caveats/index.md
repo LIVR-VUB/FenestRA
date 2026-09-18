@@ -18,6 +18,7 @@ The pipeline rarely stops with an error. It will load a scan, upsample it, segme
 | `<stem>_upsampled.tif` means two different things depending on one checkbox | Heights measured off that file are in physical units or in normalized 16-bit counts, and nothing in the file records which. | [Known issues](known-issues.md#hardcoded-settings-that-move-your-numbers) |
 | Tiles are blended with a boxcar average, and HAT's window partition leaves a periodic fingerprint | Fine periodic texture in an output image can come from the reconstruction rather than from the membrane. | [The scale-domain question](scale-domain.md#tiling-and-window-artifacts) |
 | The displayed layer scale assumes ×4 | In the 4-pane grid, Raw and Upsampled look aligned at a common physical size even when the CLAHE factor was not 4. Exported numbers are unaffected. | [Known issues](known-issues.md#3-the-hardcoded-025-layer-scale) |
+| The deep-learning backend that ran may not be the reference stack | Same weights and same arithmetic, different kernels. The all-in-one image runs torch 2.1.2, its cu128 variant torch 2.8.0, and the reference container torch 1.14; nothing in the output records which one produced your numbers. | [Known issues](known-issues.md#12-the-all-in-one-image-is-not-the-reference-dl-stack) |
 
 If you are chasing an error message rather than a suspect number, go to [Troubleshooting](troubleshooting.md).
 
@@ -33,7 +34,7 @@ Work through this list once per dataset. Each item takes under a minute and each
 6. **Compare the smallest pore you claim against the `min_size` floor.** On a 6.25 nm/px grid the 15-pixel floor removes anything below roughly 27 nm equivalent diameter. On a 25 nm/px grid, roughly 110 nm.
 7. **Name the Cellpose model that actually ran.** If you left CP Model empty, that is `cpsam` under Cellpose 4, not cyto2.
 8. **Do not read fine periodic texture as biology.** Two non-biological sources are known, and neither is labeled in the output.
-9. **Keep the checkpoint filename and the architecture with the results.** Neither the CSV nor the workbook records them. From 0.3.0 `fenestra.__version__` does report the installed release correctly and is safe to quote; on 0.2.11 and earlier it always said `0.0.1` (see [Known issues](known-issues.md#11-the-package-reports-version-001)).
+9. **Keep the checkpoint filename, the architecture, the engine and the backend stack with the results.** Neither the CSV nor the workbook records them, and nothing records whether the run went through the reference container (torch 1.14), the all-in-one image (torch 2.1.2) or its cu128 variant (torch 2.8.0). From 0.3.0 `fenestra.__version__` does report the installed release correctly and is safe to quote; on 0.2.11 and earlier it always said `0.0.1` (see [Known issues](known-issues.md#11-the-package-reports-version-001)).
 
 !!! note
     The model weights are not publicly available yet. They are released with the peer-reviewed manuscript, so a reader cannot currently reproduce a deep-learning result from the public repository alone. Say so in your methods section, and cite the checkpoint by name.

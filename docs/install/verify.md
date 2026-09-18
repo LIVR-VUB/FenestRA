@@ -1,8 +1,18 @@
 # 5 - Verify the install
 
 Work down this checklist once, on any scan, to confirm that a `.jpk-qi-image` goes in and a CSV
-comes out. It uses the **CLAHE (CPU)** method throughout, so it needs no model weights and no
-container. Each item says what you should see and what it means if you do not.
+comes out. It covers the native conda install: a conda environment plus
+`pip install napari-fenestra`, with the DL backend in a separately built container. It uses the
+**CLAHE (CPU)** method throughout, so it needs no model weights and no container. Each item says
+what you should see and what it means if you do not.
+
+!!! tip "Running the all-in-one image instead?"
+
+    Your equivalent checks are the launcher's own pre-flight lines — **Image:**, the scan count and
+    the GPU line — described under
+    [Start it, and open your browser](all-in-one.md#step-6-start-it-and-open-your-browser),
+    followed by the first pass through the [User Guide](../guide/index.md). The checklist below
+    assumes a conda environment and a shell, neither of which you have.
 
 ## The checklist
 
@@ -65,9 +75,10 @@ container. Each item says what you should see and what it means if you do not.
     CPU otherwise. A `Cellpose Error` dialog is a real failure; see
     [Troubleshooting](../caveats/troubleshooting.md).
 
-    With **CP Model** empty you get Cellpose 4's default model, `cpsam`, not the `cyto2` the
-    placeholder text names. This is expected, and explained in
-    [Segmentation](../guide/step3-segmentation.md).
+    With **CP Model** empty you get Cellpose 4's default model, `cpsam`, which is what the
+    placeholder says: `Leave empty for the Cellpose 4 default (cpsam)`. On 0.2.11 and earlier the
+    placeholder read `Leave empty for cyto2` and was wrong; the model that ran was `cpsam` in both.
+    This is explained in [Segmentation](../guide/step3-segmentation.md).
 
 - [ ] **Quantify writes a CSV.** In panel 4, click **Quantify Fenestrations**. A save dialog opens
   with the filename `fenestration_metrics.csv`. Choose a location and save.
@@ -102,6 +113,11 @@ container. Each item says what you should see and what it means if you do not.
 
 ## Verifying the container backend
 
+This section applies to the separately built reference backend only — `dl_upsampling.sif` or
+`livrvub/dl-upsampling:latest`, driven by the **Singularity** or **Docker** engine. Inside the
+all-in-one image the engine is `Local (bundled)`, there is no backend container to test, and the
+checks on [All-in-one container](all-in-one.md) replace this one.
+
 Do this once you hold model weights. Test the container on its own first, so that a GPU
 passthrough problem does not look like a model problem.
 
@@ -127,6 +143,13 @@ passthrough problem does not look like a model problem.
     If this fails with `can't open file '/opt/python'`, your image was built from a checkout that
     still had `ENTRYPOINT ["python"]` in the Dockerfile. Rebuild it. See
     [Container backend](container-backend.md).
+
+    !!! note "On macOS, drop `--gpus all`"
+
+        Docker Desktop for macOS exposes no NVIDIA GPU, so the daemon refuses `--gpus all` before
+        Python starts. Run the command without it: the check then only proves the image runs, and
+        `torch.cuda.is_available()` prints `False`. There is no GPU path for HAT or SwinIR on
+        macOS — see [Container backend](container-backend.md).
 
 Then run it through the plugin: set **Method** to `HAT` or `SwinIR`, fill in **DL Model** with your
 `.pth`, set **Engine** to match the image you built, and click **Run Upsampling**. Success looks

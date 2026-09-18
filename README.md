@@ -335,16 +335,32 @@ SCREEN=2560x1440 containers/run_fenestra.sh
 Both `2560x1440` and the older `2560x1440x24` form are accepted. `VNC_PASSWORD` is set the same
 way, if you want a password on the desktop as well as the loopback-only port:
 
+```powershell
+# PowerShell
+$env:VNC_PASSWORD = "something-long"
+.\containers\run_fenestra.bat
+```
+
 ```bat
+REM Command Prompt
 set VNC_PASSWORD=something-long
 containers\run_fenestra.bat
 ```
 
+Launch from that same window. Set in one window and launched from another, the variable never
+reaches the container and the desktop comes up with **no password at all**, silently.
+
 ### Updating
+
+Rebuild the same recipe and tag you chose in [step 4](#4-build-the-image-once) — rebuilding the
+standard image when you actually run the `cu128` one leaves the image you launch untouched.
 
 ```bash
 git pull
+
+# whichever one you built:
 docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
+docker build -t livrvub/fenestra:cu128  -f containers/Dockerfile.allinone.cu128 .
 ```
 
 Unchanged layers are reused, so an update is much faster than the first build.
@@ -517,8 +533,10 @@ will not find it. The plugin's Engine field is pre-filled with that exact string
 once you have built it.
 
 *(In Napari, select **Docker** from the Engine dropdown. No file browsing needed!)* The dropdown
-defaults to **Singularity**, so Windows and macOS users must switch it every time the widget is
-opened, and switching it back re-fills the path box with a Linux developer path.
+defaults to **Singularity** unless `FENESTRA_ENGINE` says otherwise, so Windows and macOS users
+switch it once per session. Each engine remembers its own path or tag, so switching back and forth
+no longer overwrites what you typed — Singularity restores `FENESTRA_SIF` (empty if unset) and
+Docker restores `livrvub/dl-upsampling:latest`, never a hardcoded developer path.
 
 > [!NOTE]
 > **macOS has no GPU path.** Docker Desktop for macOS has no NVIDIA passthrough, so the `--gpus
@@ -610,7 +628,9 @@ Both `site/` and `website/docs.sif` are gitignored build artefacts.
 - **`AFMReader` from PyPI.** Git is no longer a prerequisite on Windows.
 - **`fenestra.__version__` no longer lies.** It read `0.0.1` in every release; it now reports the
   installed package version.
-- **First test.** `tests/test_dl_cmd.py`, plain asserts, no framework.
+- **First tests.** `tests/test_dl_cmd.py` (six checks of the engine argv contract) and
+  `tests/test_worker_errors.py` (four checks that a worker failure still reaches a dialog).
+  Plain asserts, no framework, and nothing runs them automatically.
 
 ### v0.2
 - **Batch Analysis Module:** New Section 5 in the Napari UI for processing entire folders of `.jpk-qi-image` files. Outputs a single consolidated `.xlsx` Excel file with fenestration metrics from all images, plus individual upsampled TIFFs and Cellpose mask TIFFs.

@@ -47,7 +47,9 @@ The single-image path writes no images. If you want the upsampled scan or the ma
 ## Batch workbook
 
 `batch_results.xlsx` has one row per fenestration across all images, in the order the files were
-processed. It is the seven columns above with one prepended and one appended:
+processed. It is the seven columns above with one prepended and one appended. This order holds
+only when the first image processed has at least one detected pore; see the warning below.
+Address columns by name, never by position:
 
 | # | Column | Unit | Meaning |
 |---|---|---|---|
@@ -66,10 +68,15 @@ Averaging it over rows weights each image by its pore count.
 
 !!! warning "An image with no detected pores contributes no rows"
 
-    Such an image is absent from the workbook entirely, and the completion dialog still counts it
-    as processed. A genuinely pore-free scan and a failed segmentation look identical: both are
-    missing. Cross-check the row count in `Image_Name` against the number of files in your input
-    folder. See [Known issues](../caveats/known-issues.md).
+    Such an image contributes no rows, and the completion dialog still counts it as processed. A
+    genuinely pore-free scan and a failed segmentation look identical: both are missing.
+    Cross-check the row count in `Image_Name` against the number of files in your input folder.
+    See [Known issues](../caveats/known-issues.md).
+
+    It is not entirely absent, though: it still contributes the `Image_Name` and `Porosity`
+    columns. Columns are unioned in order of first appearance, so if such an image is processed
+    first, the header comes out `Image_Name, Porosity, Label, Area_nm2, ...` with `Porosity` in
+    column 2 rather than column 9. Read the workbook by column name, never by column number.
 
 ## The mask TIFF
 

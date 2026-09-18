@@ -141,7 +141,7 @@ The Local interpreter is `/opt/venv-dl/bin/python` (`DEFAULT_DL_PYTHON`, `pipeli
 `tests/test_dl_cmd.py` asserts the shape of all three argvs and the scrub. Run it with `python tests/test_dl_cmd.py`.
 
 !!! warning "The all-in-one image is not the reference stack"
-    The Local engine is what the [all-in-one container](../install/all-in-one.md) uses, and its bundled deep-learning environment runs torch 2.1.2 / torchvision 0.16.2 — not the torch 1.14 of `nvcr.io/nvidia/pytorch:23.01-py3` that `containers/dl_upsampling.def` still builds. The torch 1.13/1.14 wheels carry no PTX and will not start on a GPU newer than sm_86, so newer hardware has no other option. Numbers intended for publication should come from the reference container.
+    The Local engine is what the [all-in-one container](../install/all-in-one.md) uses, and its bundled deep-learning environment runs torch 2.1.2 / torchvision 0.16.2 in the standard image, or torch 2.8.0 / torchvision 0.23.0 in the `cu128` (Blackwell) image — neither is the torch 1.14 of `nvcr.io/nvidia/pytorch:23.01-py3` that `containers/dl_upsampling.def` still builds. The torch 1.13/1.14 wheels carry no PTX and will not start on a GPU newer than sm_86, so newer hardware has no other option. Numbers intended for publication should come from the reference container.
 
 !!! note "Before 0.3.0"
     The container argv was written out twice, byte for byte, once for the interactive path and once for the batch path. A change made in one block and not the other made batch results stop matching interactive ones with no error. If you are reading an older install, check both blocks.

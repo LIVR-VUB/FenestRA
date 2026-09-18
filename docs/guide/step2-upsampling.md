@@ -52,7 +52,7 @@ Before it starts a deep learning run, the plugin checks that **DL Model** points
 
 `Singularity` builds a `singularity exec --nv` command against a `.sif` file on disk, and the `...` picker lets you browse for it. This is the Linux and HPC path.
 
-`Docker` builds a `docker run --rm --gpus all` command against an image tag, and the picker is hidden because a tag is not a file. This is the Windows and macOS path for a native install, though the [all-in-one container](../install/all-in-one.md) is the recommended route on those platforms. Switching to Docker fills the field with `livrvub/dl-upsampling:latest`, which is a tag you build locally, not something published on Docker Hub. See [Container backend](../install/container-backend.md).
+`Docker` builds a `docker run --rm --gpus all` command against an image tag, and the picker is hidden because a tag is not a file. This is the Windows path for a native install, though the [all-in-one container](../install/all-in-one.md) is the recommended route there. On macOS, `--gpus all` has no hardware to expose — Docker Desktop has no NVIDIA passthrough — so HAT and SwinIR cannot run on an Apple machine by either route, and only `CLAHE (CPU)` is available. Switching to Docker fills the field with `livrvub/dl-upsampling:latest`, which is a tag you build locally, not something published on Docker Hub. See [Container backend](../install/container-backend.md).
 
 `Local (bundled)` launches no container at all. It runs the plugin's own `backend/inference.py` under a second Python interpreter on the same filesystem, `/opt/venv-dl/bin/python`, with real paths and no bind mounts. The container field is relabelled **DL backend** and greyed out, because there is nothing to fill in.
 
@@ -62,7 +62,7 @@ Before it starts a deep learning run, the plugin checks that **DL Model** points
 
     On a normal install `/opt/venv-dl/bin/python` does not exist, and choosing `Local (bundled)` gives a "DL Error" dialog reading "The bundled deep-learning environment was not found at ...". Use `Singularity` or `Docker` instead. If you have built that environment somewhere else, point `FENESTRA_DL_PYTHON` at its interpreter.
 
-    The bundled environment runs **torch 2.1.2**, not the torch 1.14 of the reference container built from `containers/dl_upsampling.def`. Numbers intended for publication should come from the reference container. The reasoning is in [The all-in-one container](../install/all-in-one.md).
+    The bundled environment runs **torch 2.1.2** in `livrvub/fenestra:latest` and **torch 2.8.0+cu128** in `livrvub/fenestra:cu128` (required for RTX 50-series / sm_120). The launcher's startup `Image:` line tells you which of the two you are on. Neither is the torch 1.14 of the reference container built from `containers/dl_upsampling.def`, so numbers intended for publication should come from the reference container. The reasoning is in [The all-in-one container](../install/all-in-one.md).
 
 !!! note "Fields are empty by default since 0.3.0"
 

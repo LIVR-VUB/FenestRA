@@ -187,9 +187,15 @@ worth something.
 
 ### Updating later
 
+`git pull`, then rebuild **the same recipe and tag you chose in step 4**. Rebuilding the standard
+tag when you actually run `:cu128` appears to succeed and changes nothing about what you launch.
+
 ```bash
 git pull
+# standard image (most GPUs)
 docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
+# cu128 image (RTX 50-series / Blackwell)
+docker build -t livrvub/fenestra:cu128 -f containers/Dockerfile.allinone.cu128 .
 ```
 
 Unchanged layers are reused, so an update is far quicker than the first build.
@@ -314,10 +320,20 @@ as it does in the desktop app — follow the [User Guide](../guide/index.md).
 
     === "Windows"
 
+        ```powershell
+        # PowerShell
+        $env:VNC_PASSWORD = "something-long"
+        .\containers\run_fenestra.bat
+        ```
+
         ```bat
+        REM Command Prompt
         set VNC_PASSWORD=something-long
         containers\run_fenestra.bat
         ```
+
+        Launch from that same window, or the variable will not reach the launcher and the
+        desktop starts with no password at all — silently.
 
     === "Linux / macOS"
 
@@ -364,16 +380,28 @@ $env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
 .\containers\run_fenestra.bat D:\path\to\your\scans
 ```
 
-The launcher then prints its whole pre-flight in three lines:
+The `.bat` launcher prints its pre-flight in this order:
 
 ```text
-Image:            livrvub/fenestra:cu128
+Checking GPU access...
 Found 3 scan(s) in D:\path\to\your\scans
+Found 1 checkpoint(s) in C:\Users\you\FenestRA\models
+Image:            livrvub/fenestra:cu128
+Your scans:       D:\path\to\your\scans   (inside the app: /data)
+Your checkpoints: C:\Users\you\FenestRA\models  (inside the app: /models)
+```
+
+A few seconds later, once the container is up, it reports the GPU it can actually see:
+
+```text
 GPU: NVIDIA GeForce RTX 5070 (sm_120, CUDA 12.8)
 ```
 
-Right image, right folder, usable GPU. If any one of them is not what you expect, stop there
-rather than finding out mid-scan.
+Right image, right folders, a checkpoint present, usable GPU. If any one of them is not what you
+expect, stop there rather than finding out mid-scan.
+
+`run_fenestra.sh` on Linux and macOS reports the same facts in a different order — the lowercase
+`image:` line and the folders first, then the two counts.
 
 ## Model weights are not included
 

@@ -4,6 +4,8 @@ How to open FenestRA inside napari, and what each of the five numbered panels do
 
 ## Opening the plugin
 
+### Native install (conda + pip)
+
 Activate the environment you installed FenestRA into, then start napari:
 
 ```bash
@@ -15,13 +17,25 @@ In napari, choose **Plugins → FenestRA Pipeline**. The plugin opens as a dock 
 
 ![napari with the FenestRA dock open on the right](../assets/ui/napari-overview.png)
 
-The dock is taller than most screens, and it has no scrollbar: whatever does not fit is clipped rather than scrollable. To reach the lower panels, enlarge the napari window, drag the dock's left edge to widen it, or double-click the dock's title bar to float it as a resizable window of its own.
-
 If **FenestRA Pipeline** is not in the Plugins menu, napari has not picked the package up. See [Verify your install](../install/verify.md).
+
+### All-in-one container (`livrvub/fenestra:latest` or `:cu128`)
+
+Run `containers/run_fenestra.bat` (Windows) or `containers/run_fenestra.sh` (Linux, macOS) and open <http://localhost:6080>. There is no conda step and no Plugins menu step: the container starts napari with the dock already open. See [The all-in-one container](../install/all-in-one.md).
+
+### Either way
+
+The dock is taller than most screens, and it has no scrollbar: whatever does not fit is clipped rather than scrollable. To reach the lower panels, enlarge the napari window, drag the dock's left edge to widen it, or double-click the dock's title bar to float it as a resizable window of its own. In the browser desktop, resizing the browser window resizes the desktop with it.
+
+Everything below this section applies to all three install paths.
 
 ## The five panels
 
 ![The full FenestRA dock, all five panels](../assets/ui/panel-full.png)
+
+!!! info "This capture predates 0.3.0"
+
+    Panel 3 in the screenshot still carries the Cellpose 2 labels `Leave empty for cyto2` and `Diameter (0=auto):`. 0.3.0 renamed them to `Leave empty for the Cellpose 4 default (cpsam)` and `Diameter (30 = no rescale):` (`_widget.py:193`, `_widget.py:208`) without changing what either control does. See [3 - Segmentation](step3-segmentation.md).
 
 | Panel | What it does | Page |
 |---|---|---|

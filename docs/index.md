@@ -70,13 +70,22 @@ flowchart LR
 The scan's physical scale (nanometres per pixel) is read from the JPK file itself and carried
 through to the final table, so every measurement comes out in nanometres.
 
-Deep learning inference runs inside a container, not in your napari environment. That is
-deliberate: the super-resolution models depend on a Python 3.8 stack that cannot coexist with a
-modern napari install. The two never share a process. See [How it works](architecture/index.md).
+Deep learning inference always runs in a **separate Python process** from napari, because the
+super-resolution models depend on `basicsr`, whose pins cannot coexist with a modern napari
+install. How that separation is enforced depends on how you installed:
+
+- **Native install (conda + pip)** — a separate container (`nvcr.io/nvidia/pytorch:23.01-py3`,
+  Python 3.8 / torch 1.14), engine **Singularity** or **Docker**. This is the reference stack, and
+  where published numbers should come from.
+- **[All-in-one image](install/all-in-one.md)** — a second virtual environment inside the same
+  image, `/opt/venv-dl` (Python 3.10, torch 2.1.2; torch 2.8.0 on the `cu128` image), engine
+  **Local (bundled)**. No container is launched, because a container cannot launch a container.
+
+See [How it works](architecture/index.md).
 
 ## Quick start
 
-Once [installed](install/index.md):
+**Native install (conda + pip)** — once [installed](install/index.md):
 
 ```bash
 conda activate fenestra-env
@@ -84,6 +93,11 @@ napari
 ```
 
 Then **Plugins → FenestRA Pipeline**, and work down the five panels.
+
+**[All-in-one container](install/all-in-one.md)** — run `containers\run_fenestra.bat` (Windows;
+or drag a folder of scans onto it in Explorer) or `containers/run_fenestra.sh` (Linux/macOS), then
+open <http://localhost:6080>. napari opens with the FenestRA dock already in place and panel 2
+preset to `Local (bundled)`. There is no conda environment to activate inside the image.
 
 ![The FenestRA dock in napari](assets/ui/panel-full.png)
 
