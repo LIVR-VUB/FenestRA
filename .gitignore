@@ -7,6 +7,14 @@ build/
 dist/
 .DS_Store
 
+# The launcher's default folders. When the repository is cloned to
+# %USERPROFILE%\FenestRA (or ~/FenestRA), these land INSIDE the working tree, so
+# without this a `git add -A` would stage AFM scans and, far worse, the trained
+# .pth checkpoints -- which are deliberately not public until the manuscript --
+# straight into a public repository.
+data/
+models/
+
 # Docs site: build output and the local docs-builder image.
 # Rebuild the image with:  apptainer build website/docs.sif website/docs.def
 site/

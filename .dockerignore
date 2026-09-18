@@ -7,6 +7,11 @@ docs
 misc
 *.sif
 *.egg-info
+# Same folders again, for a different reason: the build context is the repository
+# root and the image does COPY . , so a scan folder here would be uploaded on
+# every build and a checkpoint would be baked into the image itself.
+data
+models
 src/*.egg-info
 # ** prefix: a bare `__pycache__` is root-anchored and would miss src/fenestra/__pycache__,
 # shipping stale bytecode into the image.
