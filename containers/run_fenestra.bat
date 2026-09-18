@@ -11,12 +11,24 @@ REM application-control policy blocking unsigned .pyd files.
 REM
 REM Put your .jpk-qi-image scans in DATA_DIR and your .pth checkpoints in
 REM MODEL_DIR, then double-click this file.
+REM
+REM The container can ONLY see the folders mounted below. napari's file dialog
+REM cannot reach anything else on this PC, by design. To work from a different
+REM folder without moving your scans, set FENESTRA_DATA before launching:
+REM
+REM     set FENESTRA_DATA=D:\Microscopy\LSEC
+REM     containers\run_fenestra.bat
 REM ---------------------------------------------------------------------------
 
-set "DATA_DIR=%USERPROFILE%\FenestRA\data"
-set "MODEL_DIR=%USERPROFILE%\FenestRA\models"
-set "IMAGE=livrvub/fenestra:latest"
-set "PORT=6080"
+if not defined FENESTRA_DATA   set "FENESTRA_DATA=%USERPROFILE%\FenestRA\data"
+if not defined FENESTRA_MODELS set "FENESTRA_MODELS=%USERPROFILE%\FenestRA\models"
+if not defined FENESTRA_IMAGE  set "FENESTRA_IMAGE=livrvub/fenestra:latest"
+if not defined FENESTRA_PORT   set "FENESTRA_PORT=6080"
+
+set "DATA_DIR=%FENESTRA_DATA%"
+set "MODEL_DIR=%FENESTRA_MODELS%"
+set "IMAGE=%FENESTRA_IMAGE%"
+set "PORT=%FENESTRA_PORT%"
 
 if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 if not exist "%MODEL_DIR%" mkdir "%MODEL_DIR%"

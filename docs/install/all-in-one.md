@@ -149,9 +149,34 @@ container:
     you close it**. When the Quantify or Batch step asks where to save, choose somewhere under
     `/data`.
 
-You can point the launcher somewhere else by editing the `DATA_DIR` and `MODEL_DIR` lines at the
-top of `run_fenestra.bat`, or by setting `FENESTRA_DATA` and `FENESTRA_MODELS` before running
-`run_fenestra.sh`.
+!!! warning "Inside FenestRA you will only see these two folders"
+
+    The container cannot reach the rest of your machine. That is the isolation doing its job, not a
+    fault — but it does mean that if napari's file dialog shows nothing useful, your scans simply
+    are not in the mounted folder yet.
+
+Rather than moving your data, point the launcher at where it already lives. `FENESTRA_DATA` and
+`FENESTRA_MODELS` work on every platform:
+
+=== "Windows"
+
+    ```bat
+    cd FenestRA
+    set FENESTRA_DATA=D:\Microscopy\LSEC
+    containers\run_fenestra.bat
+    ```
+
+    Launch from that same Command Prompt rather than double-clicking, or the variable will not be
+    set.
+
+=== "Linux / macOS"
+
+    ```bash
+    FENESTRA_DATA=/path/to/scans containers/run_fenestra.sh
+    ```
+
+`FENESTRA_IMAGE` and `FENESTRA_PORT` override the image tag and the port the same way. Whatever you
+mount appears as `/data` inside the app, so the folder's own name does not matter.
 
 ## Step 6 — Start it, and open your browser
 

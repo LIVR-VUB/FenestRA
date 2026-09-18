@@ -131,6 +131,24 @@ The launcher creates these two folders on first run and mounts them into the app
 Anything saved **outside** those two folders lives inside the container and is lost when you close
 it. Save your CSV and batch output under `/data`.
 
+> [!IMPORTANT]
+> **Inside FenestRA you will only see these two folders.** The container cannot reach the rest of
+> your PC — that is the isolation working, not a fault. So if napari's file dialog shows nothing but
+> `/data`, your scans are not in the mounted folder yet.
+>
+> Either copy them into `%USERPROFILE%\FenestRA\data`, or point the launcher at wherever they
+> already live, without moving anything:
+>
+> ```bat
+> cd FenestRA
+> set FENESTRA_DATA=D:\Microscopy\LSEC
+> containers\run_fenestra.bat
+> ```
+>
+> On Linux and macOS the same variable works: `FENESTRA_DATA=/path/to/scans containers/run_fenestra.sh`.
+> `FENESTRA_MODELS` does the same for checkpoints. Launch from that same Command Prompt rather than
+> double-clicking, or the variable will not be set.
+
 The trained weights are not distributed until the manuscript is published — see
 [Model weights](docs/install/model-weights.md).
 
