@@ -12,7 +12,7 @@ So the network's input domain is roughly 60 to 170 nm/px, centered on 100.
 
 ## What FenestRA does with your scan
 
-`process_jpk` reads the scan and its scale together (`pipeline.py:24-29`). The scale is stored on the widget and displayed in panel 1. It is then not used again until the very end, where it converts pixels to nanometers (`_widget.py:486`, `pipeline.py:429`).
+`process_jpk` reads the scan and its scale together (`pipeline.py:57-62`). The scale is stored on the widget and displayed in panel 1. It is then not used again until the very end, where it converts pixels to nanometers (`_widget.py:542`, `pipeline.py:509`).
 
 The array itself goes straight into the ×4 network with no scale check anywhere in between. If you load a scan acquired at 25 nm/px, the network is asked to upsample something four times finer than anything it saw in training, and the metrics come back on a 6.25 nm/px grid.
 
@@ -21,7 +21,7 @@ The array itself goes straight into the ×4 network with no scale check anywhere
 
 ## Where your scan sits
 
-The output grid is always `input scale ÷ 4` for the deep-learning methods (`pipeline.py:429`).
+The output grid is always `input scale ÷ 4` for the deep-learning methods (`pipeline.py:509`).
 
 | Input scale (the `Scale` in panel 1) | Output grid after ×4 | Where that sits |
 |---|---|---|
@@ -43,7 +43,7 @@ The conversion arithmetic itself is correct. At 100 nm/px input and factor 4, a 
 **When writing it up.** Report the acquired pixel scale for every scan alongside the reported diameters. If a scan sits outside the band, say so, and treat its numbers as exploratory rather than quantitative. Do not pool in-domain and out-of-domain scans into one distribution.
 
 !!! tip
-    A scan acquired at about 25 nm/px is already at the resolution the network was trained to *produce*. If you have such a scan, CLAHE at factor 1 is a more defensible route than asking the ×4 network for another factor of four. Note that **Run Cellpose** always operates on the upsampled array (`_widget.py:415`) and refuses to start until an upsampling step has run (`_widget.py:402-405`), so CLAHE at factor 1 is the only way to segment at the acquired resolution from inside the plugin.
+    A scan acquired at about 25 nm/px is already at the resolution the network was trained to *produce*. If you have such a scan, CLAHE at factor 1 is a more defensible route than asking the ×4 network for another factor of four. Note that **Run Cellpose** always operates on the upsampled array (`_widget.py:471`) and refuses to start until an upsampling step has run (`_widget.py:459-461`), so CLAHE at factor 1 is the only way to segment at the acquired resolution from inside the plugin.
 
 ??? note "Why this is a scientific limit and not a missing feature"
     The degradation used in training is synthetic. The network learned to invert one specific downsampling operator, not the physical resolution limit of the AFM tip. That makes the whole approach circular unless the input matches the degradation domain it was fitted on. A dialog box warning the user does not remove the circularity, which is why the guidance here is an acquisition protocol rather than a code change.
@@ -72,7 +72,7 @@ Two consequences follow.
 
 ## Tiling and window artifacts
 
-Inference runs tiled at 256 pixels with a 32-pixel overlap (`pipeline.py:81`, `inference.py:146-150`). Overlapping regions are combined by accumulating whole tiles and dividing by a coverage count (`inference.py:181-184`). That is a boxcar average over the overlap, not a feathered blend, so a hard transition can remain visible at tile edges.
+Inference runs tiled at 256 pixels with a 32-pixel overlap (`pipeline.py:100`, `inference.py:146-150`). Overlapping regions are combined by accumulating whole tiles and dividing by a coverage count (`inference.py:181-184`). That is a boxcar average over the overlap, not a feathered blend, so a hard transition can remain visible at tile edges.
 
 Separately, HAT partitions the image into 16-pixel windows (`inference.py:48`), which is known to leave a periodic fingerprint in the output.
 

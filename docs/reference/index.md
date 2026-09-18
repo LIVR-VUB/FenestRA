@@ -15,7 +15,7 @@ nanometer.
 | Item | Value |
 |---|---|
 | PyPI package | `napari-fenestra` |
-| Version documented here | 0.2.11 |
+| Version documented here | 0.3.0 |
 | License | BSD-3-Clause |
 | DOI | [10.5281/zenodo.19700659](https://doi.org/10.5281/zenodo.19700659) |
 | Source repository | [github.com/LIVR-VUB/FenestRA](https://github.com/LIVR-VUB/FenestRA) |
@@ -25,6 +25,11 @@ nanometer.
 
 !!! note
 
-    `fenestra.__version__` reports `0.0.1` regardless of the installed release. The version in
-    `pip show napari-fenestra` is the authoritative one. See
-    [Known issues](../caveats/known-issues.md).
+    Since 0.3.0, `fenestra.__version__` reads the installed package metadata
+    (`src/fenestra/__init__.py:3-10`) and agrees with `pip show napari-fenestra`, so it is safe to
+    quote in a methods section. In a source tree that was never installed it reports
+    `0.0.0+unknown`.
+
+    Before 0.3.0 it was hardcoded to `0.0.1` and reported that regardless of the installed release.
+    If you see `0.0.1`, you are on an older install and `pip show napari-fenestra` is the
+    authoritative version.

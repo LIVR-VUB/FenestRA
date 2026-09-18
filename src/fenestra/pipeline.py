@@ -1,3 +1,4 @@
+import functools
 import os
 import subprocess
 import tempfile
@@ -16,6 +17,38 @@ try:
     from AFMReader.jpk import load_jpk
 except ImportError:
     print("Warning: AFMReader not found or could not be imported.")
+
+
+class FenestraError(Exception):
+    """A worker failure that must reach the user.
+
+    Deliberately NOT a RuntimeError. superqt's GeneratorWorker.work() catches RuntimeError,
+    returns it instead of raising, and WorkerBase.run() then emits a warning and returns *before*
+    `errored` and `finished` fire. The practical effect is the worst failure mode this codebase
+    has: the QMessageBox never appears, the button stays greyed at "Upsampling in progress...",
+    and the user has to restart napari to find out anything went wrong.
+
+    Measured against the installed superqt: a @thread_worker generator raising RuntimeError
+    produces no signals at all and leaves the worker reporting is_running == True.
+    """
+
+
+def _reporting(fn):
+    """Re-raise RuntimeError from a worker generator as FenestraError so it reaches the GUI.
+
+    This narrows nothing and swallows nothing — the original is chained with `from` and the
+    error surfaces louder than before. It also rescues RuntimeErrors raised by libraries inside
+    the worker, notably CUDA out-of-memory from torch or cellpose, which vanished the same way.
+    """
+
+    @functools.wraps(fn)
+    def inner(*args, **kwargs):
+        try:
+            yield from fn(*args, **kwargs)
+        except RuntimeError as e:
+            raise FenestraError(str(e)) from e
+
+    return inner
 
 
 def process_jpk(jpk_path: str, channel: str = "height_trace"):
@@ -53,7 +86,111 @@ def upsample_clahe(image: np.ndarray, factor: int = 4, clip_limit: float = 0.03,
     return apply_post_processing(arr_upsampled, clip_limit, unsharp_radius, unsharp_amount)
 
 
+# =====================================================================
+# Deep-learning backend invocation
+# =====================================================================
+# One argv builder for every engine. The interactive worker and the batch loop both go through
+# _run_dl_inference(), so the two can no longer drift apart the way the two hand-copied argv
+# blocks used to.
+
+#: Interpreter of the bundled deep-learning environment, used by the "Local" engine. Inside the
+#: all-in-one image this is the second venv. Override with FENESTRA_DL_PYTHON anywhere else.
+DEFAULT_DL_PYTHON = "/opt/venv-dl/bin/python"
+
+DL_TILE_SIZE = 256
+
+
+def _engine_key(engine: str) -> str:
+    """Normalise a UI engine label ("Local (bundled)") down to its keyword ("local")."""
+    parts = engine.strip().lower().split()
+    return parts[0] if parts else ""
+
+
+def _build_dl_cmd(engine, temp_in_path, temp_out_dir, container_path, model_path, architecture):
+    """Return (argv, env) for one DL inference run. env is None to inherit the current one."""
+    backend_dir = os.path.join(os.path.dirname(__file__), "backend")
+    key = _engine_key(engine)
+
+    if key == "local":
+        python_exe = os.environ.get("FENESTRA_DL_PYTHON", DEFAULT_DL_PYTHON)
+        if not os.path.exists(python_exe):
+            raise RuntimeError(
+                f"The bundled deep-learning environment was not found at {python_exe}. "
+                "The Local engine exists only inside the FenestRA all-in-one container. "
+                "Set FENESTRA_DL_PYTHON, or choose the Singularity or Docker engine."
+            )
+        # One filesystem, so there is nothing to bind-mount and no path to translate.
+        cmd = [
+            python_exe, os.path.join(backend_dir, "inference.py"),
+            "--input", os.path.dirname(temp_in_path),
+            "--output", temp_out_dir,
+            "--model_path", model_path,
+            "--arch", architecture,
+            "--tile_size", str(DL_TILE_SIZE),
+        ]
+        # The GUI runs in a different venv. A PYTHONPATH or PYTHONHOME set for that one would drag
+        # its numpy and torch into the DL interpreter, which is precisely what two separate
+        # environments exist to prevent.
+        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+        return cmd, env
+
+    mounts = [
+        (backend_dir, "/opt/dl_project/scripts"),
+        (os.path.dirname(temp_in_path), "/tmp_in"),
+        (temp_out_dir, "/tmp_out"),
+        (os.path.dirname(model_path), "/tmp_model"),
+    ]
+    # Both engines need the explicit "python": singularity exec bypasses %runscript, and the
+    # Docker recipe deliberately carries no ENTRYPOINT.
+    inner = [
+        "python", "/opt/dl_project/scripts/inference.py",
+        "--input", "/tmp_in",
+        "--output", "/tmp_out",
+        "--model_path", f"/tmp_model/{os.path.basename(model_path)}",
+        "--arch", architecture,
+        "--tile_size", str(DL_TILE_SIZE),
+    ]
+
+    if key == "singularity":
+        cmd = ["singularity", "exec", "--nv"]
+        for host, guest in mounts:
+            cmd += ["--bind", f"{host}:{guest}"]
+    elif key == "docker":
+        cmd = ["docker", "run", "--rm", "--gpus", "all"]
+        for host, guest in mounts:
+            cmd += ["-v", f"{host}:{guest}"]
+    else:
+        raise ValueError(f"Unknown engine: {engine}")
+
+    return cmd + [container_path] + inner, None
+
+
+def _run_dl_inference(temp_in_path, temp_out_dir, container_path, model_path, architecture, engine):
+    """Run one DL upsampling and return the path of the TIFF it produced."""
+    import glob as _glob
+
+    cmd, env = _build_dl_cmd(
+        engine, temp_in_path, temp_out_dir, container_path, model_path, architecture
+    )
+
+    # The interactive path reuses one output directory for the whole session. Without this, a run
+    # that produces nothing leaves the previous run's TIFF in place, and the glob below happily
+    # returns it — the user then segments and quantifies the wrong image with no indication.
+    for stale in _glob.glob(os.path.join(temp_out_dir, "*.tif*")):
+        os.remove(stale)
+
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
+    if result.returncode != 0:
+        raise RuntimeError(f"Container DL Inference failed: {result.stderr}")
+
+    out_files = _glob.glob(os.path.join(temp_out_dir, "*.tif*"))
+    if not out_files:
+        raise RuntimeError("No output generated from DL Upsampling.")
+    return out_files[0]
+
+
 @thread_worker
+@_reporting
 def run_dl_upsampling(
     temp_in_path: str,
     temp_out_dir: str,
@@ -62,59 +199,20 @@ def run_dl_upsampling(
     architecture: str,
     engine: str = "Singularity"
 ):
-    """Runs the Singularly-contained DL upsampling in the background."""
-    backend_dir = os.path.join(os.path.dirname(__file__), "backend")
-    
-    if engine.strip().lower() == "singularity":
-        cmd = [
-            "singularity", "exec", "--nv",
-            "--bind", f"{backend_dir}:/opt/dl_project/scripts",
-            "--bind", f"{os.path.dirname(temp_in_path)}:/tmp_in",
-            "--bind", f"{temp_out_dir}:/tmp_out",
-            "--bind", f"{os.path.dirname(model_path)}:/tmp_model",
-            container_path,
-            "python", "/opt/dl_project/scripts/inference.py",
-            "--input", "/tmp_in",
-            "--output", "/tmp_out",
-            "--model_path", f"/tmp_model/{os.path.basename(model_path)}",
-            "--arch", architecture,
-            "--tile_size", "256",
-        ]
-    elif engine.strip().lower() == "docker":
-        cmd = [
-            "docker", "run", "--rm", "--gpus", "all",
-            "-v", f"{backend_dir}:/opt/dl_project/scripts",
-            "-v", f"{os.path.dirname(temp_in_path)}:/tmp_in",
-            "-v", f"{temp_out_dir}:/tmp_out",
-            "-v", f"{os.path.dirname(model_path)}:/tmp_model",
-            container_path,
-            "python", "/opt/dl_project/scripts/inference.py",
-            "--input", "/tmp_in",
-            "--output", "/tmp_out",
-            "--model_path", f"/tmp_model/{os.path.basename(model_path)}",
-            "--arch", architecture,
-            "--tile_size", "256",
-        ]
-    else:
-        raise ValueError(f"Unknown engine: {engine}")
-    
-    try:
-        # We invoke this as a subprocess
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"Container DL Inference failed: {result.stderr}")
-            
-        yield "done"
-    except Exception as e:
-        raise RuntimeError(f"Background thread error: {e}")
+    """Runs the DL upsampling in the background."""
+    _run_dl_inference(
+        temp_in_path=temp_in_path,
+        temp_out_dir=temp_out_dir,
+        container_path=container_path,
+        model_path=model_path,
+        architecture=architecture,
+        engine=engine,
+    )
+    yield "done"
 
 
 @thread_worker
+@_reporting
 def run_cellpose(image: np.ndarray, model_path: str, diameter: float, cellprob_threshold: float = 0.0, flow_threshold: float = 0.4):
     """Runs cellpose segmentation in the background."""
     from cellpose import models
@@ -130,8 +228,20 @@ def run_cellpose(image: np.ndarray, model_path: str, diameter: float, cellprob_t
             device=device
         )
     else:
-        # Fallback to cyto2 if default empty
-        model = models.CellposeModel(gpu=torch.cuda.is_available(), model_type="cyto2")
+        # No usable checkpoint: take cellpose's built-in default, which is cpsam. Cellpose >= 4.0.1
+        # accepts model_type and ignores it, so the old "cyto2" argument never selected cyto2 —
+        # it selected cpsam while telling the user otherwise.
+        #
+        # Announce it. Dropping that dead argument also dropped cellpose's own
+        # "model_type argument is not used in v4.0.1+" line, which was the only signal a user ever
+        # got that a different network had been substituted. Naming the path as well turns a
+        # mistyped checkpoint — which is never validated before this point — from a silent
+        # fallback into a visible one.
+        print(
+            f"FenestRA: no Cellpose checkpoint found at {model_path!r}; "
+            "segmenting with the built-in default model (cpsam)."
+        )
+        model = models.CellposeModel(gpu=torch.cuda.is_available())
 
     eval_kwargs = dict(
         channels=None,
@@ -219,51 +329,14 @@ def run_dl_upsampling_sync(
     engine: str = "Singularity"
 ) -> str:
     """Synchronous DL upsampling — returns the output TIFF path directly."""
-    import glob as _glob
-
-    backend_dir = os.path.join(os.path.dirname(__file__), "backend")
-
-    if engine.strip().lower() == "singularity":
-        cmd = [
-            "singularity", "exec", "--nv",
-            "--bind", f"{backend_dir}:/opt/dl_project/scripts",
-            "--bind", f"{os.path.dirname(temp_in_path)}:/tmp_in",
-            "--bind", f"{temp_out_dir}:/tmp_out",
-            "--bind", f"{os.path.dirname(model_path)}:/tmp_model",
-            container_path,
-            "python", "/opt/dl_project/scripts/inference.py",
-            "--input", "/tmp_in",
-            "--output", "/tmp_out",
-            "--model_path", f"/tmp_model/{os.path.basename(model_path)}",
-            "--arch", architecture,
-            "--tile_size", "256",
-        ]
-    elif engine.strip().lower() == "docker":
-        cmd = [
-            "docker", "run", "--rm", "--gpus", "all",
-            "-v", f"{backend_dir}:/opt/dl_project/scripts",
-            "-v", f"{os.path.dirname(temp_in_path)}:/tmp_in",
-            "-v", f"{temp_out_dir}:/tmp_out",
-            "-v", f"{os.path.dirname(model_path)}:/tmp_model",
-            container_path,
-            "python", "/opt/dl_project/scripts/inference.py",
-            "--input", "/tmp_in",
-            "--output", "/tmp_out",
-            "--model_path", f"/tmp_model/{os.path.basename(model_path)}",
-            "--arch", architecture,
-            "--tile_size", "256",
-        ]
-    else:
-        raise ValueError(f"Unknown engine: {engine}")
-
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(f"Container DL Inference failed: {result.stderr}")
-
-    out_files = _glob.glob(os.path.join(temp_out_dir, "*.tif*"))
-    if not out_files:
-        raise RuntimeError("No output generated from DL Upsampling.")
-    return out_files[0]
+    return _run_dl_inference(
+        temp_in_path=temp_in_path,
+        temp_out_dir=temp_out_dir,
+        container_path=container_path,
+        model_path=model_path,
+        architecture=architecture,
+        engine=engine,
+    )
 
 
 def run_cellpose_sync(
@@ -287,7 +360,13 @@ def run_cellpose_sync(
             device=device
         )
     else:
-        model = models.CellposeModel(gpu=torch.cuda.is_available(), model_type="cyto2")
+        # See run_cellpose: model_type is accepted and ignored by cellpose >= 4.0.1, and this
+        # print is the only thing that tells a batch user the default model was substituted.
+        print(
+            f"FenestRA: no Cellpose checkpoint found at {model_path!r}; "
+            "segmenting with the built-in default model (cpsam)."
+        )
+        model = models.CellposeModel(gpu=torch.cuda.is_available())
 
     eval_kwargs = dict(
         channels=None,
@@ -334,6 +413,7 @@ def run_cellpose_sync(
 # =====================================================================
 
 @thread_worker
+@_reporting
 def run_batch_pipeline(
     input_dir: str,
     output_dir: str,

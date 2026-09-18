@@ -7,6 +7,16 @@ page says what each step is for and which of the two platform paths applies to y
 Steps 1 to 3 follow the README's installation section directly. Steps 4 and 5 cover the two things
 the README leaves to the Usage section.
 
+!!! tip "On Windows or macOS, you probably want the container instead"
+
+    [The all-in-one container](all-in-one.md) replaces every step on this page with one
+    `docker build` and one double-click. Docker Desktop becomes the only thing installed on your
+    machine: no conda, no Qt binding, no CUDA PyTorch, no Git, and no separate backend image. It
+    exists specifically because those steps keep failing on Windows.
+
+    The page below remains the right route on Linux, and is the route to use for numbers you intend
+    to publish — see the stack caveat on that page.
+
 ## Requirements
 
 | | |

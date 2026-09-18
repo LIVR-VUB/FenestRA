@@ -20,13 +20,19 @@ The reason for the split is a dependency conflict, not a preference. HAT and Swi
 Everything the two sides say to each other passes through one `subprocess.run` call, four bind mounts, and a temporary TIFF on disk:
 
 1. The host writes the raw height array to `temp_in.tif` in a temporary directory.
-2. The host builds an argv list and calls `subprocess.run` (`pipeline.py:66-99` for the interactive path, `pipeline.py:224-257` for the batch path).
+2. The host builds an argv list (`_build_dl_cmd`, `pipeline.py:109-165`) and calls `subprocess.run` (`_run_dl_inference`, `pipeline.py:168-189`), on both the interactive and the batch path.
 3. The container runs `inference.py`, reads the TIFF from `/tmp_in`, loads the weights from `/tmp_model`, and writes a float32 TIFF into `/tmp_out`.
 4. The host reads that TIFF back and continues.
 
-No Python object crosses the boundary. If the container exits with a non-zero status, the host raises `RuntimeError: Container DL Inference failed: <stderr>`. On the interactive path that exception is caught and re-wrapped (`pipeline.py:113-114`), so the message box reads `Background thread error: Container DL Inference failed: <stderr>`. The batch path raises the unprefixed form (`pipeline.py:261`). Either way the container's standard error is shown verbatim.
+No Python object crosses the boundary. If the backend exits with a non-zero status, the host raises `RuntimeError: Container DL Inference failed: <stderr>` from `_run_dl_inference` (`pipeline.py:184`). Both the interactive and the batch path raise that same message, so the dialog shows the backend's standard error verbatim.
 
-The exact mount table and the two command shapes are on [Containers](containers.md).
+!!! note "This changed in 0.3.0"
+
+    Before 0.3.0 the interactive path caught and re-wrapped the exception, so the dialog read `Background thread error: Container DL Inference failed: ...` while the batch path showed the unprefixed form. The extra wrapper is gone; if you are reading a `Background thread error:` prefix, you are on 0.2.11 or earlier.
+
+    The message still says *Container* under the **Local (bundled)** engine, which launches no container. The wording is kept because [Troubleshooting](../caveats/troubleshooting.md) is indexed by that exact string.
+
+The exact mount table and the three command shapes are on [Containers](containers.md).
 
 ## Nothing to check out
 
@@ -49,4 +55,4 @@ The exact mount table and the two command shapes are on [Containers](containers.
 ## Next
 
 - [Dataflow](dataflow.md) walks the array through every stage, with dtypes and value ranges.
-- [Containers](containers.md) covers the image contents, the bind mounts, and the difference between the two engine commands.
+- [Containers](containers.md) covers the image contents, the bind mounts, and the difference between the three engine commands - including the Local engine, which uses no container at all.

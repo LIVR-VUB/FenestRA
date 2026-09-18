@@ -1,10 +1,77 @@
 # Changelog
 
-What changed in each release, newest first. 0.2.11 is the version of the `napari-fenestra` package
-on PyPI, while `v0.1` and `v0.2` are pre-PyPI release branches that carried the package name
+What changed in each release, newest first. 0.3.0 is the current version of the `napari-fenestra`
+package, while `v0.1` and `v0.2` are pre-PyPI release branches that carried the package name
 `FenestRA`.
 
-## 0.2.11 (current)
+## 0.3.0 (current)
+
+Released 18 September 2026, branch `Beta`.
+
+- **All-in-one container.** `containers/Dockerfile.allinone` builds a single image holding napari,
+  the plugin, Cellpose and the deep-learning backend, served to a browser over noVNC at
+  <http://localhost:6080>. `containers/run_fenestra.bat` and `containers/run_fenestra.sh` start it.
+  It is the recommended route on Windows and macOS. See
+  [The all-in-one container](../install/all-in-one.md).
+- **Third engine: Local (bundled).** The **Engine** dropdown in the Upsampling panel now offers
+  Singularity, Docker and **Local (bundled)**. The local engine runs
+  `/opt/venv-dl/bin/python <site-packages>/fenestra/backend/inference.py` as an ordinary
+  subprocess against real paths, with no bind mounts and no container, which is what makes the
+  single image possible at all: a container cannot launch a container. `FENESTRA_DL_PYTHON`
+  overrides the interpreter, and `PYTHONPATH` and `PYTHONHOME` are stripped from that
+  subprocess so the GUI environment cannot leak into it.
+- **One place to build the inference command.** The two byte-for-byte copies of the container
+  argv in `pipeline.py` are gone. `_build_dl_cmd()` (line 76) returns the argv and environment for
+  all three engines, and `_run_dl_inference()` (line 135) is called by both the interactive
+  worker and the batch loop. Before this, a change to a mount or a flag had to be made twice, and
+  the batch path diverged silently if it was not.
+- **No hardcoded developer paths.** `_widget.py` no longer contains anyone's home directory. The
+  **DL Model** box and the Singularity `.sif` box start empty, the Docker tag starts at the
+  locally built `livrvub/dl-upsampling:latest`, and `FENESTRA_ENGINE`, `FENESTRA_DL_MODEL`,
+  `FENESTRA_SIF`, `FENESTRA_DOCKER_IMAGE` and `FENESTRA_CP_MODEL` override those defaults.
+  Switching engines no longer overwrites what you typed: each engine keeps its own value.
+- **Cellpose labels corrected.** The CP Model placeholder now reads *Leave empty for the Cellpose 4
+  default (cpsam)* instead of *Leave empty for cyto2*, the diameter row is labelled
+  *Diameter (30 = no rescale)* instead of *Diameter (0=auto)*, and the ignored
+  `model_type="cyto2"` argument was removed from both Cellpose calls. `setup.cfg` now pins
+  `cellpose>=4.0.1` as a hard floor because of that removal.
+- **`fenestra.__version__` is trustworthy.** It reads the installed distribution version through
+  `importlib.metadata`, and falls back to `0.0.0+unknown` only in a source tree that was never
+  installed. Up to 0.2.11 it was a hardcoded `0.0.1`.
+- **`AFMReader` installs from PyPI.** The install line is now
+  `pip install "pySPM<0.6.3" "AFMReader==0.0.7"`. The
+  `git+https://github.com/AFM-SPM/AFMReader.git` form and the warning that Git is a prerequisite
+  on Windows are both obsolete. `pySPM` is held below 0.6.3 because 0.6.3 requires `numpy>=2`.
+  `setup.cfg` declares `AFMReader>=0.0.7` and `pySPM<0.6.3` in `install_requires`; `napari` and
+  `torch` are still deliberately left undeclared, `napari` by plugin convention and `torch`
+  because it arrives with Cellpose and declaring it would not secure the CUDA build.
+- **PyQt6 pinned to 6.11.0** in the native install instructions. `napari[all]` resolves an
+  unbounded `PyQt6>6.5`, and a mismatched `PyQt6` / `PyQt6-Qt6` pair is what produces
+  `ImportError: DLL load failed while importing QtWidgets` on Windows.
+- **Docker backend argv fixed.** `containers/Dockerfile` no longer sets `ENTRYPOINT ["python"]`,
+  which used to make the argv inside the container `python python .../inference.py` and fail with
+  `can't open file '/opt/python'`.
+- **The first tests.** `tests/test_dl_cmd.py` holds six plain-assert checks of `_build_dl_cmd`.
+  There is no test framework and no CI; run it by hand with `python tests/test_dl_cmd.py`. The
+  repository had no tests before this release.
+
+!!! warning "The all-in-one image is not the reference stack"
+
+    Its bundled deep-learning environment runs torch 2.1.2 with torchvision 0.16.2, not the
+    reference torch 1.14 on `nvcr.io/nvidia/pytorch:23.01-py3`. The reason is hardware: torch
+    1.13 and 1.14 wheels carry no PTX and will not start on any GPU newer than sm_86, which rules
+    out the RTX 40-series and the H100. `containers/dl_upsampling.def` still builds the reference
+    stack and is unchanged. Numbers intended for publication should come from the reference
+    container.
+
+!!! note "Relabelled, not fixed"
+
+    The Cellpose change above corrects what the UI *claims*; it does not change what Cellpose
+    *does*. An empty CP Model box still gives you `cpsam`. Diameter 0 and diameter 30 are still
+    the same setting, and there is still no automatic diameter estimation in Cellpose 4. See
+    [Known issues](../caveats/known-issues.md).
+
+## 0.2.11
 
 Released 23 April 2026, branch `main`.
 
@@ -57,8 +124,12 @@ Released 18 April 2026.
 
 !!! warning
 
-    The Docker branch of the engine toggle does not currently run to completion. The Singularity
-    path is unaffected. See [Known issues](../caveats/known-issues.md).
+    The Docker branch of the engine toggle did not run to completion in this release or in
+    0.2.11: the recipe's `ENTRYPOINT ["python"]` made the command inside the container
+    `python python .../inference.py`, which dies with `can't open file '/opt/python'`. The
+    Singularity path was unaffected. Fixed in 0.3.0, but an image built from the old recipe still
+    carries the bad `ENTRYPOINT` and still fails, so rebuild it. See
+    [Known issues](../caveats/known-issues.md).
 
 ## Which version do I have
 
@@ -66,11 +137,19 @@ Released 18 April 2026.
 pip show napari-fenestra
 ```
 
-!!! warning
+or, from 0.3.0 onwards, from Python:
 
-    Do not read the version from Python. `fenestra.__version__` reports `0.0.1` no matter which
-    release is installed, so it is not safe to quote in a methods section or a bug report. Use
-    `pip show`.
+```python
+import fenestra; fenestra.__version__
+```
+
+!!! note
+
+    `fenestra.__version__` reads the installed distribution metadata from 0.3.0 onwards, so it is
+    safe to quote in a methods section or a bug report. In 0.2.11 and earlier it was hardcoded to
+    `0.0.1` regardless of the release installed; if you see `0.0.1`, you are on an older install
+    and `pip show` is the only reliable answer. A source tree that was never installed reports
+    `0.0.0+unknown`.
 
 ## About the branches
 

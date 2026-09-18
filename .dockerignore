@@ -1,0 +1,14 @@
+# The all-in-one build context is the repository root, so keep it small.
+.git
+website
+site
+dist
+docs
+misc
+*.sif
+*.egg-info
+src/*.egg-info
+# ** prefix: a bare `__pycache__` is root-anchored and would miss src/fenestra/__pycache__,
+# shipping stale bytecode into the image.
+**/__pycache__
+**/*.pyc

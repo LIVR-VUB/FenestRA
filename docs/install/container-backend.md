@@ -10,6 +10,23 @@ reading the result back.
 You only need this page if you plan to use the **HAT** or **SwinIR** methods. The **CLAHE (CPU)**
 method never launches a container.
 
+!!! tip "There is a shorter route on Windows and macOS"
+
+    The [all-in-one container](all-in-one.md) ships napari, the plugin, Cellpose *and* a
+    deep-learning backend in one image you open in a browser. It needs nothing on the host but
+    Docker Desktop, and it replaces this page's build entirely.
+
+    It is not the same stack. Its bundled backend runs **torch 2.1.2**, because the torch
+    1.13/1.14 wheels carry no PTX fallback and will not start on any GPU newer than sm_86 — no
+    RTX 40-series, no H100.
+
+!!! info "This page builds the reference stack"
+
+    `containers/dl_upsampling.def` is unchanged, and both recipes on this page still build torch
+    1.14 on `nvcr.io/nvidia/pytorch:23.01-py3` — the stack the method was developed and validated
+    against. **Numbers intended for publication should be produced with the container built on
+    this page**, not with the all-in-one image.
+
 ## Get the recipes
 
 The container definitions are in the repository, not in the pip package, so clone the repository
@@ -38,11 +55,12 @@ That gives you `containers/dl_upsampling.def` (Apptainer) and `containers/Docker
     In napari, set **Engine** to `Singularity` and use the `...` button next to
     **Singularity (.sif):** to select that file.
 
-    !!! warning "The Engine dropdown overwrites what you typed"
+    !!! note "The path field no longer resets (0.3.0)"
 
-        Switching **Engine** back to `Singularity` resets the path field to a hardcoded developer
-        path. Re-select your `.sif` after any toggle. See
-        [Known issues](../caveats/known-issues.md).
+        Before 0.3.0 the field arrived pre-filled with a developer's home directory, and toggling
+        **Engine** back to `Singularity` overwrote whatever you had typed. Since 0.3.0 the field
+        starts empty, and each engine keeps its own value across toggles
+        (`_widget.py:140-149`, `:303-329`). Set `FENESTRA_SIF` to pre-fill it with your own path.
 
 === "Windows / macOS (Docker)"
 
@@ -86,7 +104,8 @@ That gives you `containers/dl_upsampling.def` (Apptainer) and `containers/Docker
     unshared drive mounts as an empty directory rather than raising an error.
 
     In napari, set **Engine** to `Docker`. The field next to it changes to **Docker Tag:** and is
-    filled with `livrvub/dl-upsampling:latest` for you. There is no file to browse for.
+    filled with `livrvub/dl-upsampling:latest` for you, or with `FENESTRA_DOCKER_IMAGE` if you set
+    it (`_widget.py:31`). There is no file to browse for.
 
     !!! note "Rebuild if your image predates the ENTRYPOINT fix"
 
@@ -98,6 +117,25 @@ That gives you `containers/dl_upsampling.def` (Apptainer) and `containers/Docker
     It is not published on Docker Hub. `docker pull` will not find it. The name is only the label
     the build command above attaches to the image on your own machine, and the plugin's default
     text matches that label so the two line up after you build.
+
+## The third engine, and why it is not this one
+
+Since 0.3.0 the **Engine** dropdown offers `Singularity`, `Docker` and `Local (bundled)`
+(`_widget.py:37`). `Local (bundled)` runs the inference script as a plain subprocess under a second
+Python interpreter on the same filesystem, with no bind mounts and no container, because a
+container cannot launch a container. It exists for the [all-in-one image](all-in-one.md).
+
+On a normal host there is no such interpreter, and choosing it raises before anything runs
+(`pipeline.py:116-121`):
+
+```text
+The bundled deep-learning environment was not found at /opt/venv-dl/bin/python.
+The Local engine exists only inside the FenestRA all-in-one container.
+Set FENESTRA_DL_PYTHON, or choose the Singularity or Docker engine.
+```
+
+`FENESTRA_DL_PYTHON` points it at another interpreter if you have built the deep-learning
+environment yourself. That environment is yours to keep correct; nothing checks its versions.
 
 ## The Docker ENTRYPOINT fix
 
@@ -131,8 +169,13 @@ how the mismatch arose in the first place. History in [Known issues](../caveats/
 
 ??? note "What gets mounted, for the curious"
 
-    The plugin binds four directories into the container and passes only paths that live inside
-    them:
+    Both engines' argv is built in one place since 0.3.0 — `_build_dl_cmd()` at `pipeline.py:109`,
+    called through `_run_dl_inference()` at `:168` by both the interactive worker and the batch
+    loop. Before 0.3.0 the two paths carried byte-for-byte copies of the same block and could
+    drift apart silently.
+
+    The plugin binds four directories into the container (`pipeline.py:137-142`) and passes only
+    paths that live inside them:
 
     | Host | Container |
     |---|---|

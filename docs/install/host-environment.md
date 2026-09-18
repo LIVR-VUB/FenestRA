@@ -20,12 +20,13 @@ You need `conda activate fenestra-env` in every new terminal before launching na
 ## Install napari and the scientific stack
 
 ```bash
-pip install "napari[all]" magicgui qtpy scipy scikit-image pandas tifffile "numpy<2" openpyxl
+pip install "napari[all]" "PyQt6==6.11.0" magicgui qtpy scipy scikit-image pandas tifffile "numpy<2" openpyxl
 ```
 
 | Package | Used for |
 |---|---|
 | `napari[all]` | the viewer and a Qt backend. The plain `napari` package ships no Qt bindings |
+| `PyQt6==6.11.0` | pinned deliberately. `napari[all]` resolves to `PyQt6>6.5` with no upper bound, so two people installing a week apart get different Qt versions — and a `PyQt6` whose version does not match its own `PyQt6-Qt6` produces `DLL load failed while importing QtWidgets` on Windows. See [Troubleshooting](../caveats/troubleshooting.md#no-qt-bindings-could-be-found) |
 | `magicgui`, `qtpy` | the widget layer the FenestRA dock is built on |
 | `scipy` | the cubic-spline zoom behind CLAHE upsampling |
 | `scikit-image` | CLAHE, unsharp masking, `regionprops`, boundary finding for the overlay |
@@ -75,17 +76,23 @@ fields.
 ## Install AFMReader
 
 ```bash
-pip install git+https://github.com/AFM-SPM/AFMReader.git
+pip install "pySPM<0.6.3" "AFMReader==0.0.7"
 ```
-
-That command shells out to `git`, so `git` must be on your `PATH`. Windows does not ship it —
-install [Git for Windows](https://git-scm.com/download/win) first, or pip stops with
-`ERROR: Cannot find command 'git'`.
 
 AFMReader is the only reader for `.jpk-qi-image` files in the pipeline. It returns both the height
 array and the scan's nanometers-per-pixel scale, and that scale is what converts every measurement
-from pixels to nanometers. It is distributed from git rather than PyPI, which is why it cannot be
-declared as an ordinary dependency of the package.
+from pixels to nanometers.
+
+`pySPM` is held below 0.6.3 because 0.6.3 declares `numpy>=2.0.0`, which would drag NumPy 2 into an
+environment built around NumPy 1. It arrives as an AFMReader dependency; the `.jpk` code path never
+imports it.
+
+!!! note "This used to require Git, and no longer does"
+
+    Earlier versions of these instructions installed AFMReader with
+    `pip install git+https://github.com/AFM-SPM/AFMReader.git`, which shells out to `git` and
+    stopped Windows users with `ERROR: Cannot find command 'git'`. AFMReader is published on PyPI,
+    so plain `pip` is enough and Git is no longer a prerequisite.
 
 ## Check the environment before moving on
 

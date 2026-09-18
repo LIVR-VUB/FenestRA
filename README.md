@@ -44,13 +44,34 @@ By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated 
 > indexed by error message. Build it locally with `bash website/serve.sh` (see
 > [Documentation](#documentation)).
 
+> [!IMPORTANT]
+> **On Windows and macOS, use the all-in-one container instead of the steps below.**
+>
+> ```bat
+> git clone https://github.com/LIVR-VUB/FenestRA.git
+> cd FenestRA
+> docker build -t livrvub/fenestra:latest -f containers\Dockerfile.allinone .
+> containers\run_fenestra.bat
+> ```
+>
+> Then open <http://localhost:6080>. Docker Desktop is the only thing installed on Windows — no
+> Anaconda, no Qt, no CUDA PyTorch, no Git, and no second container. That removes every Windows
+> failure we have actually been sent: `QtBindingsNotFoundError`, `DLL load failed while importing
+> QtWidgets`, `DLL load failed ... application control policies have blocked this file`, and
+> `Cannot find command 'git'`. Full guide: [All-in-one container](docs/install/all-in-one.md).
+>
+> One caveat worth knowing before you publish from it: the bundled backend runs torch 2.1.2 rather
+> than the reference stack's torch 1.14, because torch 1.14 will not start on any GPU newer than
+> sm_86. Numbers destined for a manuscript should come from the reference container
+> (`containers/dl_upsampling.def`). The section below builds that.
+
+The steps below are the **native install** — the right choice on Linux, where Apptainer works
+properly and there is no VNC layer between you and the GPU.
+
 ### 1. Requirements
 - Python 3.10+
 - An NVIDIA GPU with CUDA 12.4 drivers (recommended for DL inference)
-- **Git.** One dependency (`AFMReader`) is installed straight from a git repository, so `pip`
-  needs a working `git` on your `PATH`. On Windows this is not present by default — install
-  [Git for Windows](https://git-scm.com/download/win) first, or step 2 fails with
-  `ERROR: Cannot find command 'git'`.
+- ~~**Git.**~~ No longer required: `AFMReader` is on PyPI and installs with plain `pip`.
 
 > [!CAUTION]
 > <small>**Hardware Compatibility Warning:** FenestRA requires deep learning hardware capable of running modern tensor operations. Extremely old legacy GPUs based on the Maxwell architecture (Compute Capability 5.2 or earlier, such as the Quadro M4000) physically lack hardware support for BFloat16 (`CUDA_R_16BF`) math. Running the plugin on these ancient GPUs will cause PyTorch and Cellpose to instantly crash with a `CUBLAS_STATUS_NOT_SUPPORTED` error.</small>
@@ -66,7 +87,9 @@ conda create -n fenestra-env -c conda-forge python=3.10 numpy=1.26.4
 conda activate fenestra-env
 
 # Install base GUI tools, Napari, and core scientific dependencies
-pip install "napari[all]" magicgui qtpy scipy scikit-image pandas tifffile "numpy<2" openpyxl
+# PyQt6 is pinned: napari[all] resolves to an unbounded PyQt6>6.5, and a PyQt6 whose version
+# does not match its own PyQt6-Qt6 is what produces "DLL load failed while importing QtWidgets"
+pip install "napari[all]" "PyQt6==6.11.0" magicgui qtpy scipy scikit-image pandas tifffile "numpy<2" openpyxl
 
 # Install PyTorch mapped explicitly to CUDA 12.4 to ensure GPU hardware acceleration works
 pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.4.0 torchvision==0.19.0
@@ -74,8 +97,9 @@ pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.4.0 torc
 # Install Cellpose for fenestration instance segmentation (pinned: the docs and UI labels describe 4.1.1 behavior)
 pip install cellpose==4.1.1
 
-# Install AFMReader for handling raw JPK AFM metadata
-pip install git+https://github.com/AFM-SPM/AFMReader.git
+# Install AFMReader for handling raw JPK AFM metadata.
+# pySPM is held below 0.6.3 because 0.6.3 requires NumPy 2; the .jpk path never imports it.
+pip install "pySPM<0.6.3" "AFMReader==0.0.7"
 ```
 
 ### 3. Install FenestRA
@@ -88,12 +112,15 @@ pip install --upgrade napari-fenestra
 ```
 
 > [!IMPORTANT]
-> **Step 2 is not optional.** The published package does not declare `napari`, `AFMReader`, or
-> `torch` in `install_requires`, even though all three are imported at runtime. Installing
-> `napari-fenestra` on its own therefore leaves you with no viewer to dock into and no `.jpk`
-> reader. `AFMReader` is distributed from git rather than PyPI, which is why it cannot be declared
-> as an ordinary dependency. `torch` does arrive indirectly via `cellpose`, but as the default
-> PyPI wheel rather than the CUDA 12.4 build from step 2, so you lose GPU acceleration.
+> **Step 2 is still not optional.** As of 0.3.0 the package does declare `AFMReader` (and the
+> `pySPM<0.6.3` pin it needs), so a bare `pip install napari-fenestra` no longer leaves you without
+> a `.jpk` reader. Two gaps remain by design:
+>
+> - **`napari` is not declared.** By convention a napari plugin does not depend on napari, because
+>   the viewer and its Qt backend are the user's choice. You still install it yourself, in step 2.
+> - **`torch` is not declared.** It arrives through `cellpose`, but as the default PyPI wheel rather
+>   than the CUDA 12.4 build from step 2. Declaring it here would not change which build you get,
+>   and the order in step 2 is what secures GPU acceleration.
 
 ### 4. Setup the Deep Learning Backend (Docker vs Singularity)
 
@@ -240,6 +267,30 @@ Both `site/` and `website/docs.sif` are gitignored build artefacts.
 ---
 
 ## Changelog
+
+### v0.3
+- **All-in-one container.** `containers/Dockerfile.allinone` builds a single image holding napari,
+  the plugin, Cellpose and the super-resolution backend, served to a browser over noVNC. On Windows
+  and macOS, Docker Desktop becomes the only prerequisite. Launch with `containers/run_fenestra.bat`
+  or `containers/run_fenestra.sh`, then open <http://localhost:6080>.
+- **New `Local (bundled)` DL engine.** Runs the super-resolution step in a second Python environment
+  on the same filesystem instead of launching a container, which is what makes a single image
+  possible — a container cannot start a container. `PYTHONPATH` and `PYTHONHOME` are scrubbed from
+  that subprocess so the GUI environment cannot leak into the deep-learning one.
+- **One container argv builder.** `_build_dl_cmd()` now serves both the interactive worker and the
+  batch loop. The two hand-copied argv blocks that had to be kept in sync by hand are gone.
+- **No hardcoded developer paths.** The DL model and container fields defaulted to a maintainer's
+  home directory in the published package. They now read `FENESTRA_DL_MODEL`, `FENESTRA_SIF`,
+  `FENESTRA_DOCKER_IMAGE` and `FENESTRA_ENGINE`, and switching engines no longer overwrites what
+  you typed.
+- **Cellpose labels now describe Cellpose 4.** The model box said "Leave empty for cyto2" while
+  cellpose >= 4.0.1 ignores `model_type` and loads `cpsam`; the diameter box said "0 = auto" when
+  cellpose 4 has no auto mode and treats 0 and 30 identically. Both corrected, and the ignored
+  `model_type="cyto2"` argument removed. Behaviour is unchanged — only the claims were wrong.
+- **`AFMReader` from PyPI.** Git is no longer a prerequisite on Windows.
+- **`fenestra.__version__` no longer lies.** It read `0.0.1` in every release; it now reports the
+  installed package version.
+- **First test.** `tests/test_dl_cmd.py`, plain asserts, no framework.
 
 ### v0.2
 - **Batch Analysis Module:** New Section 5 in the Napari UI for processing entire folders of `.jpk-qi-image` files. Outputs a single consolidated `.xlsx` Excel file with fenestration metrics from all images, plus individual upsampled TIFFs and Cellpose mask TIFFs.

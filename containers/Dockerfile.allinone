@@ -1,0 +1,275 @@
+# syntax=docker/dockerfile:1
+#
+# FenestRA, all in one image.
+#
+#   docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
+#   containers\run_fenestra.bat          (Windows)
+#   containers/run_fenestra.sh           (Linux, macOS)
+#   then open http://localhost:6080
+#
+# WHY THIS IMAGE EXISTS
+# ---------------------
+# The normal install asks a Windows user for Anaconda, a Qt binding, a CUDA build of PyTorch,
+# Cellpose, Git, and a second container for the deep-learning backend. Every one of those has
+# produced a real support ticket: Qt DLL version skew, application-control policies blocking
+# unsigned .pyd files, a missing git on PATH. None of it applies here, because none of it runs
+# on Windows. Docker Desktop is the only requirement.
+#
+# THE ONE DESIGN DECISION
+# -----------------------
+# FenestRA needs two Python environments that cannot merge. The GUI side wants napari, Qt 6 and
+# Cellpose 4 on modern NumPy. The super-resolution side needs basicsr, which still imports
+# torchvision.transforms.functional_tensor - removed in torchvision 0.17 - so it is stuck on an
+# older torch/torchvision pair. Until now that separation was enforced by running the DL step in
+# a SECOND container, which is exactly what cannot work once the plugin itself is containerised.
+#
+# So the separation moves inside: two venvs, one filesystem. The plugin's "Local" engine runs
+#     /opt/venv-dl/bin/python .../backend/inference.py
+# as an ordinary subprocess instead of shelling out to `docker run`. Same isolation, same
+# process boundary, no nesting.
+#
+#   /opt/venv-gui   python3.10  napari 0.7 + PyQt6 6.11 + torch 2.4/cu124 + Cellpose 4.1.1
+#   /opt/venv-dl    python3.10  torch 2.1.2 + torchvision 0.16.2 + basicsr 1.4.2 + HAT + SwinIR
+#
+# NOT THE REFERENCE STACK. The validated Singularity/Docker backend is torch 1.14 on
+# nvcr.io/nvidia/pytorch:23.01-py3, and containers/dl_upsampling.def still builds exactly that.
+# This image runs torch 2.1.2 instead, because torch 1.13/1.14 wheels carry no PTX and will not
+# start on any GPU newer than sm_86 - no RTX 40-series, no H100. Numbers intended for
+# publication should be produced with the reference container; this image is for getting a
+# biologist to a working screen. See docs/install/all-in-one.md.
+
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+LABEL org.opencontainers.image.title="FenestRA all-in-one"
+LABEL org.opencontainers.image.description="napari + FenestRA + super-resolution backend + noVNC desktop"
+LABEL org.opencontainers.image.source="https://github.com/LIVR-VUB/FenestRA"
+LABEL org.opencontainers.image.licenses="BSD-3-Clause"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONNOUSERSITE=1
+
+# ---------------------------------------------------------------------------
+# 1. System packages
+# ---------------------------------------------------------------------------
+# The Qt list is not guesswork. It was produced by ldd-ing PyQt6 6.11's libqxcb.so and verified
+# by rendering napari under Xvfb in a clean ubuntu:22.04 container. libxcb-cursor0 is the one
+# that produces the notorious
+#     qt.qpa.plugin: Could not load the Qt platform plugin "xcb"
+# and Qt 6.5+ is the version that started needing it. libxcb-xinerama0, which every Qt5-era
+# recipe on the internet includes, is NOT linked by Qt 6.11 and is deliberately absent.
+#
+# xauth is required by xvfb-run, which the build-time smoke tests below use.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      fonts-dejavu-core \
+      git \
+      libdbus-1-3 \
+      libegl-mesa0 \
+      libegl1 \
+      libfontconfig1 \
+      libfreetype6 \
+      libgl1 \
+      libgl1-mesa-dri \
+      libglib2.0-0 \
+      libglx-mesa0 \
+      libglx0 \
+      libopengl0 \
+      libx11-6 \
+      libx11-xcb1 \
+      libxcb-cursor0 \
+      libxcb-glx0 \
+      libxcb-icccm4 \
+      libxcb-image0 \
+      libxcb-keysyms1 \
+      libxcb-randr0 \
+      libxcb-render-util0 \
+      libxcb-render0 \
+      libxcb-shape0 \
+      libxcb-shm0 \
+      libxcb-sync1 \
+      libxcb-util1 \
+      libxcb-xfixes0 \
+      libxcb-xkb1 \
+      libxcb1 \
+      libxext6 \
+      libxkbcommon-x11-0 \
+      libxkbcommon0 \
+      libxrender1 \
+      novnc \
+      openbox \
+      python3-websockify \
+      python3.10 \
+      python3.10-dev \
+      python3.10-venv \
+      tini \
+      x11-utils \
+      x11vnc \
+      xauth \
+      xkb-data \
+      xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# 2. The deep-learning venv
+# ---------------------------------------------------------------------------
+# Order matters and is load-bearing. basicsr 1.4.2 declares `torch>=1.7` with no upper bound,
+# so if it is installed before torch, pip happily pulls torch 2.4 with torchvision 0.19 - and
+# torchvision 0.19 has no functional_tensor module, which is the precise breakage this venv
+# exists to avoid. torch goes first, every time.
+#
+# torchvision 0.16.2 pins torch==2.1.2 exactly, and still ships transforms/functional_tensor.py
+# as a deprecation shim that re-exports rgb_to_grayscale. 0.17 deletes it. That is the entire
+# reason for this pin, and it is why the pin cannot drift upward.
+RUN python3 -m venv /opt/venv-dl \
+ && /opt/venv-dl/bin/pip install --upgrade pip setuptools wheel
+
+RUN /opt/venv-dl/bin/pip install "torch==2.1.2" "torchvision==0.16.2"
+
+# einops (HAT) and timm (the SwinIR fallback) used to arrive only as transitive dependencies of
+# pyiqa. Dropping pyiqa - which inference.py never imports - therefore silently broke HAT until
+# these were named explicitly.
+# tifffile is pinned because current releases require Python >= 3.12 and NumPy >= 2.1.
+RUN /opt/venv-dl/bin/pip install \
+      "numpy<1.24.0" \
+      "opencv-python-headless==4.8.0.74" \
+      "tifffile==2024.8.30" \
+      einops \
+      timm \
+      tqdm
+
+# basicsr 1.4.2 ships no pyproject.toml and declares setup_requires=[cython, numpy, torch], so a
+# PEP 517 isolated build downloads a second multi-gigabyte copy of torch into a throwaway
+# environment. --no-build-isolation makes it build against the torch installed above.
+# It then drags in full opencv-python; swap it back out for the headless build afterwards.
+RUN /opt/venv-dl/bin/pip install --no-build-isolation "basicsr==1.4.2" \
+ && { /opt/venv-dl/bin/pip uninstall -y opencv-python || true; }
+RUN /opt/venv-dl/bin/pip install --force-reinstall --no-deps \
+      "numpy<1.24.0" "opencv-python-headless==4.8.0.74"
+
+# inference.py:36 loads /opt/HAT/hat/archs/hat_arch.py by absolute path, so this location is not
+# negotiable. Commits are pinned: an image that silently tracks someone else's default branch
+# cannot reproduce a published measurement.
+ARG HAT_SHA=1638a9a822581657811867bf670717f8371fc3e5
+ARG SWINIR_SHA=6545850fbf8df298df73d81f3e8cba638787c8bd
+RUN git clone https://github.com/XPixelGroup/HAT.git /opt/HAT \
+ && git -C /opt/HAT checkout --quiet "${HAT_SHA}" \
+ && git clone https://github.com/JingyunLiang/SwinIR.git /opt/SwinIR \
+ && git -C /opt/SwinIR checkout --quiet "${SWINIR_SHA}" \
+ && rm -rf /opt/HAT/.git /opt/SwinIR/.git
+
+# A .pth file rather than PYTHONPATH, because the plugin deliberately scrubs PYTHONPATH from the
+# subprocess environment to stop the GUI venv's numpy and torch leaking into this interpreter.
+RUN printf '/opt/HAT\n/opt/SwinIR\n' > /opt/venv-dl/lib/python3.10/site-packages/_fenestra_archs.pth
+
+# Every trap above becomes a build failure here instead of a runtime failure in front of a user.
+RUN /opt/venv-dl/bin/python - <<'PY'
+import importlib.util
+import numpy, torch, tifffile, tqdm, einops, timm
+from torchvision.transforms.functional_tensor import rgb_to_grayscale  # noqa: F401  (gone in 0.17)
+import basicsr                                                          # noqa: F401  (the import chain that breaks)
+spec = importlib.util.spec_from_file_location("hat_arch", "/opt/HAT/hat/archs/hat_arch.py")
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+assert hasattr(mod, "HAT"), "HAT class missing from the pinned clone"
+from basicsr.archs.swinir_arch import SwinIR  # noqa: F401
+import sys; sys.path.insert(0, "/opt/SwinIR")
+from models.network_swinir import SwinIR as SwinIRFallback  # noqa: F401
+print(f"DL venv OK - torch {torch.__version__}, numpy {numpy.__version__}")
+PY
+
+# ---------------------------------------------------------------------------
+# 3. The GUI venv
+# ---------------------------------------------------------------------------
+# torch first again, so Cellpose cannot pull a CPU-only wheel from PyPI on top of the CUDA build.
+RUN python3 -m venv /opt/venv-gui \
+ && /opt/venv-gui/bin/pip install --upgrade pip setuptools wheel
+
+RUN /opt/venv-gui/bin/pip install \
+      --index-url https://download.pytorch.org/whl/cu124 \
+      "torch==2.4.0" "torchvision==0.19.0"
+
+# PyQt6 is pinned rather than left to napari's open-ended `PyQt6>6.5`. An unpinned binding is how
+# a Windows user ended up with a PyQt6 whose Qt6 DLLs did not match its own .pyd files; pinning
+# also keeps the apt list above matched to the Qt version it was verified against.
+#
+# AFMReader is on PyPI - the README's `pip install git+...` is no longer necessary, which is what
+# removes Git from the requirements entirely. pySPM is held below 0.6.3 because 0.6.3 demands
+# NumPy >= 2; the .jpk code path never imports pySPM at all, it is pulled in as a dependency.
+RUN /opt/venv-gui/bin/pip install \
+      "numpy>=1.26.0,<2.0.0" \
+      "napari[pyqt6]==0.7.0" \
+      "PyQt6==6.11.0" \
+      "cellpose==4.1.1" \
+      "pySPM<0.6.3" \
+      "AFMReader==0.0.7" \
+      magicgui \
+      openpyxl \
+      pandas \
+      qtpy \
+      scikit-image \
+      scipy \
+      tifffile
+
+# Cellpose 4's only downloadable model is cpsam (1.15 GiB). Baking it in means first run is not a
+# silent multi-minute download on a biologist's laptop. The cache directory is set explicitly
+# because cellpose evaluates Path.home()/.cellpose at import time, so a container running under a
+# different UID than the one that built it would otherwise re-download.
+ENV CELLPOSE_LOCAL_MODELS_PATH=/opt/cellpose-models
+RUN /opt/venv-gui/bin/python -c "from cellpose.models import cache_CPSAM_model_path as c; print(c())" \
+ && test "$(stat -c%s /opt/cellpose-models/cpsam)" -ge 1200000000
+
+# ---------------------------------------------------------------------------
+# 4. The plugin
+# ---------------------------------------------------------------------------
+COPY . /src/fenestra
+RUN /opt/venv-gui/bin/pip install /src/fenestra
+
+# The verified headless check: if the xcb platform plugin cannot load, the build stops here
+# rather than shipping an image that shows a blank browser tab.
+RUN xvfb-run -a -s "-screen 0 1280x1024x24" /opt/venv-gui/bin/python - <<'PY'
+from PyQt6.QtWidgets import QApplication
+app = QApplication([])
+assert app.platformName() == "xcb", f"Qt fell back to {app.platformName()!r}"
+import napari, fenestra
+from fenestra.pipeline import _build_dl_cmd
+cmd, env = _build_dl_cmd("Local (bundled)", "/tmp/in/x.tif", "/tmp/out", "", "/models/m.pth", "hat")
+assert cmd[0] == "/opt/venv-dl/bin/python", cmd[0]
+assert "PYTHONPATH" not in env
+print(f"GUI venv OK - napari {napari.__version__}, Qt platform {app.platformName()}")
+PY
+
+# ---------------------------------------------------------------------------
+# 5. Desktop
+# ---------------------------------------------------------------------------
+# noVNC ships vnc.html, vnc_lite.html and vnc_auto.html but no index.html, so without this a bare
+# http://localhost:6080 serves a directory listing. vnc.html is chosen over vnc_lite.html because
+# it supports clipboard.
+RUN printf '%s' '<!doctype html><meta http-equiv="refresh" content="0;url=vnc.html?autoconnect=1&resize=scale">' \
+      > /usr/share/novnc/index.html
+
+COPY containers/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY containers/fenestra-app.py /usr/local/bin/fenestra-app.py
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Defaults the widget reads, so nobody sees a stranger's home directory in a text box and the
+# DL engine is preselected to the one that actually exists in here.
+ENV FENESTRA_ENGINE=Local \
+    FENESTRA_DL_PYTHON=/opt/venv-dl/bin/python \
+    FENESTRA_DL_MODEL=/models/best_model_ema.pth \
+    PATH=/opt/venv-gui/bin:$PATH \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+
+# Mount points. /models is where the checkpoints go; they are not in this image and, until the
+# manuscript is out, are not public.
+RUN mkdir -p /data /models
+VOLUME ["/data", "/models"]
+WORKDIR /data
+
+EXPOSE 6080
+
+# tini reaps the Xvfb/openbox/x11vnc/websockify children and forwards SIGTERM, so a plain
+# `docker run` behaves without the user having to remember --init.
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

@@ -1,8 +1,9 @@
 # Parameters
 
-Every control in the FenestRA dock, panel by panel, with its default and its real behavior. Two
-labels in panel 3 describe an older version of Cellpose and are flagged below. A final section lists
-the values that are fixed in code and cannot be reached from the interface.
+Every control in the FenestRA dock, panel by panel, with its default and its real behavior. Since
+0.3.0 the path defaults come from environment variables rather than from anyone's home directory;
+they are listed in [Environment variables](#environment-variables). A final section lists the values
+that are fixed in code and cannot be reached from the interface.
 
 ## Panel 1. Input Data
 
@@ -26,10 +27,10 @@ the values that are fixed in code and cannot be reached from the interface.
 | `Clip Limit:` | `0.020` | 0.000 to 99.990 (no range set in code, so the spinbox default applies), step 0.01 | CLAHE contrast clip limit, passed to `equalize_adapthist` | Applies to the CLAHE route, and to the DL route only when **Apply Post-DL Sharpening** is ticked. |
 | `Unsharp Radius:` | `1.00` | 0.00 to 99.99 (spinbox default), step 1.00 | Gaussian radius of the unsharp mask | Same visibility rule as Clip Limit. Use the keyboard rather than the arrows for small changes. |
 | `Unsharp Amount:` | `1.00` | 0.00 to 99.99 (spinbox default), step 1.00 | Strength of the unsharp mask | Same visibility rule as Clip Limit. |
-| `DL Model:` + `...` | `/home/arka/Desktop/AFM-Project/DL_Upsampling/models/best_model_ema.pth` | File picker, filter `*.pth` | Path to the super-resolution checkpoint, bind-mounted into the container | The default is a developer path that will not exist on your machine. You must replace it. The weights are not public; see [Model weights](../install/model-weights.md). |
-| `Engine:` | `Singularity` | `Singularity`, `Docker` | Which container runtime is invoked | Linux hosts use Singularity/Apptainer. See [Container backend](../install/container-backend.md). |
+| `DL Model:` + `...` | empty, or `$FENESTRA_DL_MODEL`; placeholder `Path to the .pth checkpoint` | File picker, filter `*.pth` | Path to the super-resolution checkpoint. Under Singularity and Docker its directory is bind-mounted into the container; under `Local (bundled)` it is passed through as a real path | Empty until you point it at a checkpoint. **Before 0.3.0 this box was pre-filled with a developer path** under `/home/arka/`, which existed on no other machine. The weights are not public; see [Model weights](../install/model-weights.md). |
+| `Engine:` | `Singularity`, or `$FENESTRA_ENGINE` | `Singularity`, `Docker`, `Local (bundled)` | Which backend runs the network. Singularity and Docker launch a container; **Local (bundled)** runs `inference.py` under a second Python interpreter on the same filesystem, as a plain subprocess with no bind mounts and no path translation | Linux hosts use Singularity/Apptainer. `Local (bundled)` is new in 0.3.0 and exists for the [all-in-one container](../install/all-in-one.md), which sets `FENESTRA_ENGINE=Local`: a container cannot start a container. Elsewhere it refuses with a named path unless `FENESTRA_DL_PYTHON` points at a suitable interpreter. See [Container backend](../install/container-backend.md). |
 | `Apply Post-DL Sharpening` | unchecked | on / off | Runs CLAHE plus unsharp masking on the network output | **Changes both the data type and the units of the saved image.** See [Output files](outputs.md). |
-| `Singularity (.sif):` / `Docker Tag:` + `...` | `/home/arka/Desktop/AFM-Project/DL_Upsampling/containers/dl_upsampling.sif` | File picker, filter `*.sif *.def` (hidden in Docker mode) | The container image to run | The label and the contents swap with the Engine dropdown. Selecting Docker replaces the text with `livrvub/dl-upsampling:latest`. Selecting Singularity again **overwrites whatever you typed** with the developer path above. |
+| `Singularity (.sif):` / `Docker Tag:` / `DL backend:` + `...` | empty, or `$FENESTRA_SIF`, under Singularity; `livrvub/dl-upsampling:latest`, or `$FENESTRA_DOCKER_IMAGE`, under Docker; unused under Local | File picker, filter `*.sif *.def` (Singularity only) | The container image to run | The label, the placeholder and the contents follow the Engine dropdown. **Each engine keeps its own value**: switch to Docker and back and the Singularity path you typed is still there. Before 0.3.0, switching back overwrote it with a developer path. Under `Local (bundled)` the field is disabled and shows only which interpreter will be used. |
 | `Run Upsampling` | — | — | Runs the chosen route and adds the layer **Upsampled AFM** | The CLAHE route runs on the GUI thread, so napari stops responding until it finishes. It is not crashed. |
 
 ### Which controls are visible
@@ -40,26 +41,40 @@ the values that are fixed in code and cannot be reached from the interface.
 | `HAT` / `SwinIR`, sharpening off | hidden | hidden | shown |
 | `HAT` / `SwinIR`, sharpening on | hidden | shown | shown |
 
+Under `Local (bundled)` the container row is still shown, but the text field is disabled and its
+`...` button is hidden, because there is no image to choose.
+
+!!! warning "The bundled Local environment is not the reference stack"
+
+    Inside the [all-in-one container](../install/all-in-one.md) the `Local (bundled)` engine runs
+    **torch 2.1.2 / torchvision 0.16.2**, not the reference stack's torch 1.14 on
+    `nvcr.io/nvidia/pytorch:23.01-py3`. Torch 1.13 and 1.14 wheels carry no PTX and will not start
+    on any GPU newer than sm_86, which rules out the RTX 40-series and the H100, so the all-in-one
+    image could not use them. `containers/dl_upsampling.def` still builds the reference stack and
+    is unchanged. **Numbers intended for publication should come from the reference container.**
+
 ## Panel 3. Cellpose Segmentation
 
 | Control | Default | Range or options | What it does | Notes |
 |---|---|---|---|---|
-| `CP Model:` + `...` | empty, placeholder `Leave empty for cyto2` | Any file path | Path to a Cellpose checkpoint. If the path does not exist on disk, the plugin falls back to a built-in model | **The placeholder is wrong under Cellpose 4.** Leaving it empty gives you `cpsam`, not `cyto2`. |
-| `Diameter (0=auto):` | `30.00` | 0.00 to 500.00, step 1.00 | Sets Cellpose 4's image rescaling as `30 / diameter` | **The label is wrong under Cellpose 4.** There is no auto mode. `0` and `30` both mean "no rescaling". Below 30 the image is upscaled before segmentation, above 30 it is downscaled. |
+| `CP Model:` + `...` | empty, or `$FENESTRA_CP_MODEL`; placeholder `Leave empty for the Cellpose 4 default (cpsam)` | Any file path | Path to a Cellpose checkpoint. If the path does not exist on disk, the plugin builds `CellposeModel` with no pretrained model, which loads the Cellpose 4 default, `cpsam` | The placeholder read `Leave empty for cyto2` before 0.3.0. **The label was wrong, not the behaviour**: an empty box has always given you `cpsam`. |
+| `Diameter (30 = no rescale):` | `30.00` | 0.00 to 500.00, step 1.00 | Sets Cellpose 4's image rescaling as `30 / diameter` | **Not a size in pixels, and there is no auto mode.** `0` and `30` both mean "no rescaling" — `0` fails Cellpose's `> 0` test. Below 30 the image is upscaled before segmentation, above 30 it is downscaled. The label read `Diameter (0=auto):` before 0.3.0. |
 | `Cellprob Thresh:` | `0.00` | −10.00 to 10.00, step 0.1 | Cell probability threshold. Lower values accept more, and larger, pores | Behaves as documented by Cellpose. |
 | `Flow Thresh:` | `0.40` | 0.00 to 10.00, step 0.1 | Maximum allowed flow error per mask. Lower values reject more irregular shapes | Behaves as documented by Cellpose. |
 | `Run Cellpose` | — | — | Segments the upsampled image on the host GPU and adds the labels layer **Cellpose Masks** | Runs on the upsampled image, never on the raw one. |
 
-!!! warning "Two labels in this panel describe Cellpose 2"
+!!! warning "0.3.0 corrected these two labels. It did not change what they do."
 
-    The plugin passes `model_type="cyto2"` when **CP Model** is empty. Cellpose 4.0.1 and later
-    accept that argument, log `model_type argument is not used in v4.0.1+. Ignoring this
-    argument...`, and load `cpsam` instead. You get plausible masks from a different network than
-    the label promises.
+    Up to 0.2.11 the plugin passed `model_type="cyto2"` when **CP Model** was empty. Cellpose 4.0.1
+    and later accept that argument, log `model_type argument is not used in v4.0.1+. Ignoring this
+    argument...`, and load `cpsam` anyway. 0.3.0 drops the argument and rewrites the placeholder, so
+    the interface now states what the code always did: **you get `cpsam`**. `setup.cfg` pins
+    `cellpose>=4.0.1` as a hard floor for the same reason. Masks are unchanged across the two
+    versions.
 
-    `Diameter` is no longer a size in pixels. Cellpose 4 computes `image_scaling = 30. / diameter`,
+    `Diameter` is still not a size in pixels. Cellpose 4 computes `image_scaling = 30. / diameter`,
     so the default of 30 is a no-op, and 0 fails the `> 0` test and is also a no-op. Setting it to
-    15 doubles the image before segmentation; setting it to 60 halves it.
+    15 doubles the image before segmentation; setting it to 60 halves it. Only the label changed.
 
     Details and the full list in [Segmentation](../guide/step3-segmentation.md).
 
@@ -80,6 +95,32 @@ the values that are fixed in code and cannot be reached from the interface.
 | `Run Batch` | — | — | Runs load, upsample, segment, and measure for every file found | **Reuses the settings from panels 2 and 3 as they stand.** There is no separate batch configuration. |
 
 See [Batch analysis](../guide/step5-batch.md) for the full workflow.
+
+## Environment variables
+
+New in 0.3.0. These set the defaults the dock opens with, so one wheel is correct on a developer
+box, on an HPC node and inside the all-in-one image. They are read once, when the widget is built,
+so export them before starting napari. Nothing here overrides a value you type: the interface wins
+for the rest of the session.
+
+| Variable | Sets | Default if unset |
+|---|---|---|
+| `FENESTRA_ENGINE` | The engine selected at startup. Matched on the first word only, so `Local` selects `Local (bundled)` | `Singularity` |
+| `FENESTRA_DL_MODEL` | **DL Model** | empty |
+| `FENESTRA_SIF` | The container box while the engine is Singularity | empty |
+| `FENESTRA_DOCKER_IMAGE` | The container box while the engine is Docker | `livrvub/dl-upsampling:latest` |
+| `FENESTRA_CP_MODEL` | **CP Model** | empty |
+| `FENESTRA_DL_PYTHON` | The interpreter the `Local (bundled)` engine runs `inference.py` with. There is no control for this in the interface | `/opt/venv-dl/bin/python` |
+
+The all-in-one image sets `FENESTRA_ENGINE`, `FENESTRA_DL_PYTHON` and `FENESTRA_DL_MODEL` in its
+Dockerfile, which is why its dock opens ready to run.
+
+!!! note "The Local engine gets a cleaned environment"
+
+    Everything else is inherited, but `PYTHONPATH` and `PYTHONHOME` are stripped from the
+    subprocess. Either one, set for the napari environment, would drag that environment's numpy and
+    torch into the deep-learning interpreter, which is the one thing two separate environments exist
+    to prevent.
 
 ## Values fixed in code
 
@@ -110,6 +151,11 @@ section.
 | `load_state_dict` | `strict=True` | A mismatched checkpoint raises rather than loading partially. This is deliberate: it is what stops a wrong network from producing plausible output. |
 | Normalization | per-image min-max to `[0, 1]`, output clipped to `[0, 1]` | Applied inside the container before and after the network. See [The scale-domain question](../caveats/scale-domain.md). |
 | Output filename | `<input_stem>_SR4x.tif`, float32 | Written to a temporary directory, then read back by the plugin. |
+
+Since 0.3.0 all three engines get their command line from one builder, `_build_dl_cmd()` in
+`pipeline.py`, used by both the interactive run and the batch loop. The two hand-copied argv blocks
+that could drift apart are gone. `tests/test_dl_cmd.py` checks the builder with six
+plain assertions; run it from the FenestRA environment with `python tests/test_dl_cmd.py`.
 
 ### Other
 

@@ -97,6 +97,7 @@ nav:
   - Home: index.md
   - Getting Started:
       - install/index.md
+      - All-in-one container (recommended on Windows): install/all-in-one.md
       - 1 - Host environment: install/host-environment.md
       - 2 - Install FenestRA: install/install-fenestra.md
       - 3 - Container backend: install/container-backend.md

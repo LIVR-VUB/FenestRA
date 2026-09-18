@@ -8,7 +8,7 @@ section so a reviewer can tell what you actually ran.
 Cite the software release by its Zenodo DOI:
 
 > Sarkar, A. (2026). *FenestRA: A napari plugin for LSEC AFM super-resolution and fenestration
-> analysis* (Version 0.2.11) [Computer software]. Zenodo.
+> analysis* (Version 0.3.0) [Computer software]. Zenodo.
 > <https://doi.org/10.5281/zenodo.19700659>
 
 ```bibtex
@@ -17,7 +17,7 @@ Cite the software release by its Zenodo DOI:
   title     = {{FenestRA}: A napari plugin for {LSEC} {AFM} super-resolution
                and fenestration analysis},
   year      = {2026},
-  version   = {0.2.11},
+  version   = {0.3.0},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.19700659},
   url       = {https://github.com/LIVR-VUB/FenestRA},
@@ -25,8 +25,15 @@ Cite the software release by its Zenodo DOI:
 }
 ```
 
-Replace the version with the one you ran, from `pip show napari-fenestra`. `fenestra.__version__`
-reports `0.0.1` regardless of what is installed, so do not quote it.
+Replace the version with the one you ran. Either `pip show napari-fenestra` or
+`python -c "import fenestra; print(fenestra.__version__)"` gives it: since 0.3.0 `__version__` is
+read back from the installed package metadata, so the two agree and either is safe to quote.
+
+!!! note "On 0.2.11 and earlier"
+
+    `fenestra.__version__` was a hardcoded `"0.0.1"` that never tracked the installed version. If
+    your run predates 0.3.0, take the version from `pip show napari-fenestra` and not from the
+    package attribute.
 
 !!! note "The manuscript"
 
@@ -64,21 +71,23 @@ provide the viewer and the `regionprops` measurements behind every number in the
 
 ## What to put in your methods section
 
-A reviewer needs to be able to reconstruct the measurement from your text alone. Six things
-determine the numbers: the plugin version, the upsampling method and factor, whether post-DL
-sharpening was applied, the Cellpose model, the Cellpose parameters, and the acquisition scale in
-nm/px. The last one matters most, because the pixel size sets the physical meaning of every
-diameter in the table and is never checked by the plugin.
+A reviewer needs to be able to reconstruct the measurement from your text alone. Seven things
+determine the numbers: the plugin version, the upsampling method and factor, **which container ran
+the super-resolution**, whether post-DL sharpening was applied, the Cellpose model, the Cellpose
+parameters, and the acquisition scale in nm/px. The acquisition scale matters most, because the
+pixel size sets the physical meaning of every diameter in the table and is never checked by the
+plugin.
 
 A template, with the values from a typical HAT run substituted:
 
 ```text
 AFM images of liver sinusoidal endothelial cells were acquired at 100 nm/px and
-analyzed with FenestRA (napari-fenestra v0.2.11, DOI 10.5281/zenodo.19700659).
+analyzed with FenestRA (napari-fenestra v0.3.0, DOI 10.5281/zenodo.19700659).
 Height-trace channels were read from the raw .jpk-qi-image files with AFMReader
-and upsampled x4 with the HAT super-resolution model executed inside an
-Apptainer container; post-DL sharpening was not applied. Fenestrations were
-segmented with Cellpose 4.1.1 using the default cpsam model, diameter 30.0,
+and upsampled x4 with the HAT super-resolution model executed inside the
+reference Apptainer container (nvcr.io/nvidia/pytorch:23.01-py3, torch 1.14);
+post-DL sharpening was not applied. Fenestrations were segmented with
+Cellpose 4.1.1 using the default cpsam model, diameter 30.0,
 cellprob threshold 0.00, flow threshold 0.40, min_size 15 px, and per-image
 percentile normalization (1.0, 99.0). Area, perimeter, equivalent diameter and
 eccentricity were computed with scikit-image regionprops on the resulting
@@ -90,12 +99,13 @@ Where each value comes from:
 
 | What to report | Where to read it |
 |---|---|
-| Plugin version | `pip show napari-fenestra` |
+| Plugin version | `pip show napari-fenestra`, or `fenestra.__version__` on 0.3.0 and later |
 | Acquisition scale | The `Scale: <x> nm/px` line in panel 1 after loading the file |
 | Upsampling method and factor | **Method** and **Factor** in panel 2. HAT and SwinIR are always ×4; **Factor** applies to CLAHE only |
+| Super-resolution environment | **Engine** in panel 2: `Singularity` or `Docker` runs the reference container, `Local (bundled)` runs a second Python environment on the same filesystem. Report which, and the image or interpreter it used |
 | Post-DL sharpening | The **Apply Post-DL Sharpening** checkbox, and if ticked, the Clip Limit, Unsharp Radius and Unsharp Amount values |
-| Cellpose model | The **CP Model** field. Leaving it empty gives `cpsam` under Cellpose 4, not cyto2, whatever the placeholder text says |
-| Cellpose parameters | **Diameter**, **Cellprob Thresh** and **Flow Thresh** in panel 3, plus `min_size=15` and the `(1.0, 99.0)` percentile normalization, which are fixed in the code and not exposed in the UI |
+| Cellpose model | The **CP Model** field. Leaving it empty gives `cpsam`, the Cellpose 4 built-in default. Never cyto2: Cellpose 4 ignores `model_type` entirely. Report `cpsam`, or the path of the custom `.pth` you supplied |
+| Cellpose parameters | **Diameter**, **Cellprob Thresh** and **Flow Thresh** in panel 3, plus `min_size=15` and the `(1.0, 99.0)` percentile normalization, which are fixed in the code and not exposed in the UI. Under Cellpose 4 the diameter is a rescaling factor (`30 / diameter`), so `30` and `0` both mean *no rescale*; there is no automatic estimate to report |
 | Cellpose version | `pip show cellpose` |
 
 Every control and its default is listed in [Parameters](../reference/parameters.md); the
@@ -108,3 +118,13 @@ arithmetic that turns pixels into nanometers is in [Metrics](../reference/metric
     of what you feed it. A scan acquired far from that band produces a plausible-looking image
     and out-of-domain measurements. Read
     [The scale-domain question](../caveats/scale-domain.md) before writing the sentence.
+
+!!! warning "If you ran the all-in-one image, say so"
+
+    The [all-in-one container](../install/all-in-one.md) does not carry the reference
+    deep-learning stack. Its bundled environment runs **torch 2.1.2 / torchvision 0.16.2**, not the
+    **torch 1.14** on `nvcr.io/nvidia/pytorch:23.01-py3` that `containers/dl_upsampling.def` builds
+    and that the method was developed against. The weights, the architectures and the arithmetic
+    are the same, but the two stacks are not bit-for-bit equivalent. Numbers intended for
+    publication should come from the reference container; if they came from the all-in-one image,
+    the methods section has to name it and its torch version.

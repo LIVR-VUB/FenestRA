@@ -11,7 +11,30 @@ import tifffile
 import numpy as np
 import napari
 
-from .pipeline import process_jpk, upsample_clahe, run_dl_upsampling, run_cellpose, quantify_fenestrations, run_batch_pipeline
+from .pipeline import (
+    DEFAULT_DL_PYTHON,
+    _engine_key,
+    process_jpk,
+    quantify_fenestrations,
+    run_batch_pipeline,
+    run_cellpose,
+    run_dl_upsampling,
+    upsample_clahe,
+)
+
+# Defaults come from the environment, so the same wheel is correct on a developer box, on an
+# HPC node, and inside the all-in-one container, which sets these in its Dockerfile. Nothing
+# in this file points at anyone's home directory.
+DEFAULT_ENGINE = os.environ.get("FENESTRA_ENGINE", "Singularity")
+DEFAULT_DL_MODEL = os.environ.get("FENESTRA_DL_MODEL", "")
+DEFAULT_SIF = os.environ.get("FENESTRA_SIF", "")
+DEFAULT_DOCKER_IMAGE = os.environ.get("FENESTRA_DOCKER_IMAGE", "livrvub/dl-upsampling:latest")
+DEFAULT_CP_MODEL = os.environ.get("FENESTRA_CP_MODEL", "")
+
+#: "Local (bundled)" runs the DL step in a second Python environment on this same filesystem
+#: instead of launching a container, which is what makes the all-in-one image possible: you
+#: cannot start a container from inside a container.
+ENGINES = ["Singularity", "Docker", "Local (bundled)"]
 
 class FenestraWidget(QWidget):
     def __init__(self, napari_viewer):
@@ -99,7 +122,8 @@ class FenestraWidget(QWidget):
         self.dl_widget.setLayout(dl_layout)
 
         # Model path
-        self.line_model_path = QLineEdit("/home/arka/Desktop/AFM-Project/DL_Upsampling/models/best_model_ema.pth")
+        self.line_model_path = QLineEdit(DEFAULT_DL_MODEL)
+        self.line_model_path.setPlaceholderText("Path to the .pth checkpoint")
         self.btn_pick_model = QPushButton("...")
         self.btn_pick_model.setFixedWidth(30)
         self.btn_pick_model.clicked.connect(lambda: self.pick_file(self.line_model_path, "*.pth"))
@@ -111,7 +135,18 @@ class FenestraWidget(QWidget):
         
         # Engine
         self.combo_engine = QComboBox()
-        self.combo_engine.addItems(["Singularity", "Docker"])
+        self.combo_engine.addItems(ENGINES)
+        # Remembered per engine, so switching engines no longer discards what was typed.
+        self._engine_paths = {
+            "Singularity": DEFAULT_SIF,
+            "Docker": DEFAULT_DOCKER_IMAGE,
+            "Local (bundled)": "",
+        }
+        wanted = _engine_key(DEFAULT_ENGINE)
+        self._current_engine = next(
+            (e for e in ENGINES if _engine_key(e) == wanted), ENGINES[0]
+        )
+        self.combo_engine.setCurrentText(self._current_engine)
         self.combo_engine.currentIndexChanged.connect(self.on_engine_changed)
         dl_layout.addRow("Engine:", self.combo_engine)
 
@@ -122,7 +157,7 @@ class FenestraWidget(QWidget):
 
         # Container path / tag
         self.lbl_container = QLabel("Singularity (.sif):")
-        self.line_container = QLineEdit("/home/arka/Desktop/AFM-Project/DL_Upsampling/containers/dl_upsampling.sif")
+        self.line_container = QLineEdit()
         self.btn_pick_container = QPushButton("...")
         self.btn_pick_container.setFixedWidth(30)
         self.btn_pick_container.clicked.connect(lambda: self.pick_file(self.line_container, "*.sif *.def"))
@@ -131,6 +166,7 @@ class FenestraWidget(QWidget):
         cont_layout.addWidget(self.line_container)
         cont_layout.addWidget(self.btn_pick_container)
         dl_layout.addRow(self.lbl_container, cont_layout)
+        self.on_engine_changed()  # label, placeholder and text now match the selected engine
         
         up_layout.addRow(self.dl_widget)
         
@@ -150,8 +186,11 @@ class FenestraWidget(QWidget):
         seg_group = QGroupBox("3. Cellpose Segmentation")
         seg_layout = QFormLayout()
         
-        self.line_cp_model = QLineEdit("") # empty means cyto2
-        self.line_cp_model.setPlaceholderText("Leave empty for cyto2")
+        self.line_cp_model = QLineEdit(DEFAULT_CP_MODEL)
+        # Cellpose 4 ignores model_type, so an empty box gets the built-in default (cpsam),
+        # never cyto2. Saying otherwise here is how a user publishes masks from a model they
+        # did not choose.
+        self.line_cp_model.setPlaceholderText("Leave empty for the Cellpose 4 default (cpsam)")
         self.btn_pick_cp = QPushButton("...")
         self.btn_pick_cp.setFixedWidth(30)
         self.btn_pick_cp.clicked.connect(lambda: self.pick_file(self.line_cp_model, "*"))
@@ -164,7 +203,9 @@ class FenestraWidget(QWidget):
         self.spin_diameter = QDoubleSpinBox()
         self.spin_diameter.setRange(0.0, 500.0)
         self.spin_diameter.setValue(30.0)
-        seg_layout.addRow("Diameter (0=auto):", self.spin_diameter)
+        # Cellpose 4 turns this into a scale factor of 30/diameter, so 30 means no rescaling
+        # and 0 is silently treated the same way. There is no auto-estimate in cellpose 4.
+        seg_layout.addRow("Diameter (30 = no rescale):", self.spin_diameter)
         
         self.spin_cellprob = QDoubleSpinBox()
         self.spin_cellprob.setRange(-10.0, 10.0)
@@ -260,15 +301,32 @@ class FenestraWidget(QWidget):
             self.postprocess_widget.setVisible(self.chk_postprocess.isChecked())
 
     def on_engine_changed(self):
+        """Point the container field at the selected engine, keeping each engine's own value."""
         engine = self.combo_engine.currentText()
-        if engine == "Docker":
+        previous = getattr(self, "_current_engine", engine)
+        if previous != engine:
+            self._engine_paths[previous] = self.line_container.text()
+        self._current_engine = engine
+
+        key = _engine_key(engine)
+        if key == "docker":
             self.lbl_container.setText("Docker Tag:")
-            self.line_container.setText("livrvub/dl-upsampling:latest")
+            self.line_container.setPlaceholderText("Locally built image tag")
+            self.line_container.setEnabled(True)
+            self.btn_pick_container.setVisible(False)
+        elif key == "local":
+            self.lbl_container.setText("DL backend:")
+            self.line_container.setPlaceholderText(
+                f"Bundled environment at {os.environ.get('FENESTRA_DL_PYTHON', DEFAULT_DL_PYTHON)}"
+            )
+            self.line_container.setEnabled(False)
             self.btn_pick_container.setVisible(False)
         else:
             self.lbl_container.setText("Singularity (.sif):")
-            self.line_container.setText("/home/arka/Desktop/AFM-Project/DL_Upsampling/containers/dl_upsampling.sif")
+            self.line_container.setPlaceholderText("Path to dl_upsampling.sif")
+            self.line_container.setEnabled(True)
             self.btn_pick_container.setVisible(True)
+        self.line_container.setText(self._engine_paths.get(engine, ""))
 
     # --- Actions ---
 
@@ -359,11 +417,9 @@ class FenestraWidget(QWidget):
         import glob
         # Find the output tiff in temp_out_dir
         temp_out_dir = os.path.join(self.temp_dir.name, "out")
+        # _run_dl_inference already clears the directory, runs, and raises if nothing was
+        # produced, so reaching here means exactly one fresh TIFF is present.
         out_files = glob.glob(os.path.join(temp_out_dir, "*.tif*"))
-        if not out_files:
-            self._on_dl_error(RuntimeError("No output generated from DL Upsampling."))
-            return
-            
         self.upsampled_image = tifffile.imread(out_files[0])
         
         if self.chk_postprocess.isChecked():

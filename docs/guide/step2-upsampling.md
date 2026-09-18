@@ -1,6 +1,6 @@
 # 2 - Upsampling
 
-Enlarging the loaded scan so that Cellpose has enough pixels per pore to segment. This panel offers one method that runs on your CPU and needs nothing extra, and two that run a trained super-resolution model inside a container.
+Enlarging the loaded scan so that Cellpose has enough pixels per pore to segment. This panel offers one method that runs on your CPU and needs nothing extra, and two that run a trained super-resolution model in a separate deep-learning environment.
 
 ![Panel 2, Upsampling / Enhancement](../assets/ui/step2-upsampling.png)
 
@@ -9,12 +9,12 @@ Enlarging the loaded scan so that Cellpose has enough pixels per pore to segment
 | Method | What it is | Factor | Needs |
 |---|---|---|---|
 | `CLAHE (CPU)` | Cubic interpolation, then contrast equalization, then unsharp masking | 1 to 10, you choose | Nothing beyond the host environment |
-| `HAT` | Trained HAT super-resolution model | Always ×4 | Container backend and a `.pth` checkpoint |
-| `SwinIR` | Trained SwinIR super-resolution model | Always ×4 | Container backend and a `.pth` checkpoint |
+| `HAT` | Trained HAT super-resolution model | Always ×4 | A deep-learning backend and a `.pth` checkpoint |
+| `SwinIR` | Trained SwinIR super-resolution model | Always ×4 | A deep-learning backend and a `.pth` checkpoint |
 
 **`CLAHE (CPU)` is not super-resolution.** It enlarges the array with cubic interpolation (`scipy.ndimage.zoom`, order 3), applies contrast-limited adaptive histogram equalization, and sharpens with an unsharp mask. No information is added that was not in the original scan. Use it to check that the rest of the pipeline works, and for any scan where you do not have applicable weights. It needs no GPU.
 
-**`HAT` and `SwinIR` are the trained models.** They run at a fixed ×4 upscale, so the **Factor** box disappears when you select them. They require the container backend to be built and a checkpoint file on disk.
+**`HAT` and `SwinIR` are the trained models.** They run at a fixed ×4 upscale, so the **Factor** box disappears when you select them. They require a checkpoint file on disk and a deep-learning backend, which is either a container you built or, inside the all-in-one image, the bundled environment. The **Engine** dropdown picks between them.
 
 !!! important "The model weights are not public yet"
 
@@ -41,24 +41,34 @@ The panel hides controls that do not apply, so it looks different depending on t
 | **Clip Limit** | `0.020` | Contrast limit for the equalization, three decimals, arrow steps of 0.01. Higher means more aggressive local contrast |
 | **Unsharp Radius** | `1.00` | Radius of the sharpening kernel in pixels of the enlarged image |
 | **Unsharp Amount** | `1.00` | Strength of the sharpening |
-| **DL Model** | a pre-filled path, see below | Path to a `.pth` checkpoint. The `...` button opens a `*.pth` file picker |
-| **Engine** | `Singularity` | Or `Docker` |
+| **DL Model** | empty, or `FENESTRA_DL_MODEL` | Path to a `.pth` checkpoint. The `...` button opens a `*.pth` file picker |
+| **Engine** | `Singularity`, or `FENESTRA_ENGINE` | Also `Docker` and `Local (bundled)` |
 | **Apply Post-DL Sharpening** | unticked | Runs the same equalization and sharpening on the model's output |
-| **Singularity (.sif)** / **Docker Tag** | a pre-filled value, see below | Label and content change with the engine |
+| **Singularity (.sif)** / **Docker Tag** / **DL backend** | empty, `livrvub/dl-upsampling:latest`, or disabled | Label, content and editability change with the engine, see below |
 
-Before it starts a deep learning run, the plugin checks that **DL Model** points at a file that exists ("Model path is invalid." if not) and, for Singularity, that the container file exists ("Singularity container path is invalid.").
+Before it starts a deep learning run, the plugin checks that **DL Model** points at a file that exists ("Model path is invalid." if not) and, for Singularity only, that the container file exists ("Singularity container path is invalid."). Docker and Local are not pre-checked; a bad tag or a missing bundled environment surfaces as a "DL Error" dialog when the run starts.
 
 ## The Engine dropdown
 
 `Singularity` builds a `singularity exec --nv` command against a `.sif` file on disk, and the `...` picker lets you browse for it. This is the Linux and HPC path.
 
-`Docker` builds a `docker run --rm --gpus all` command against an image tag, and the picker is hidden because a tag is not a file. This is the Windows and macOS path. Switching to Docker fills the field with `livrvub/dl-upsampling:latest`, which is a tag you build locally, not something published on Docker Hub. See [Container backend](../install/container-backend.md).
+`Docker` builds a `docker run --rm --gpus all` command against an image tag, and the picker is hidden because a tag is not a file. This is the Windows and macOS path for a native install, though the [all-in-one container](../install/all-in-one.md) is the recommended route on those platforms. Switching to Docker fills the field with `livrvub/dl-upsampling:latest`, which is a tag you build locally, not something published on Docker Hub. See [Container backend](../install/container-backend.md).
 
-!!! warning "Switching back to Singularity overwrites what you typed"
+`Local (bundled)` launches no container at all. It runs the plugin's own `backend/inference.py` under a second Python interpreter on the same filesystem, `/opt/venv-dl/bin/python`, with real paths and no bind mounts. The container field is relabelled **DL backend** and greyed out, because there is nothing to fill in.
 
-    Selecting `Singularity` in the Engine dropdown replaces the contents of the container field with a fixed path, discarding anything you had entered. The same is true in reverse for Docker. Set the engine first, then fill in the path, and re-check the field if you ever toggle the dropdown.
+!!! important "`Local (bundled)` only works inside the all-in-one image"
 
-    The two values it writes are developer paths from the machine the plugin was built on. **DL Model** and **Singularity (.sif)** both ship pre-filled with `/home/arka/Desktop/AFM-Project/DL_Upsampling/...`, which will not exist on your system. Replace both with your own paths.
+    That second interpreter exists in the [all-in-one container](../install/all-in-one.md), which preselects this engine for you. The dropdown still lists all three there, but it is the only one that works, because a container cannot launch a container.
+
+    On a normal install `/opt/venv-dl/bin/python` does not exist, and choosing `Local (bundled)` gives a "DL Error" dialog reading "The bundled deep-learning environment was not found at ...". Use `Singularity` or `Docker` instead. If you have built that environment somewhere else, point `FENESTRA_DL_PYTHON` at its interpreter.
+
+    The bundled environment runs **torch 2.1.2**, not the torch 1.14 of the reference container built from `containers/dl_upsampling.def`. Numbers intended for publication should come from the reference container. The reasoning is in [The all-in-one container](../install/all-in-one.md).
+
+!!! note "Fields are empty by default since 0.3.0"
+
+    **DL Model** and the container field start blank, and each engine keeps its own value when you switch the dropdown. Environment variables set the defaults: `FENESTRA_ENGINE`, `FENESTRA_DL_MODEL`, `FENESTRA_SIF`, `FENESTRA_DOCKER_IMAGE`. The all-in-one image sets `FENESTRA_ENGINE`, `FENESTRA_DL_PYTHON` and `FENESTRA_DL_MODEL`, so nothing has to be typed there.
+
+    Before 0.3.0 both fields shipped pre-filled with `/home/arka/Desktop/AFM-Project/DL_Upsampling/...` from the machine the plugin was built on, and selecting `Singularity` overwrote whatever you had typed. If you see a stranger's home directory in these boxes, you are on an older install.
 
 !!! warning "Rebuild a Docker image built before September 2026"
 
@@ -84,7 +94,7 @@ It can make pore rims easier for Cellpose to find. It also changes what the imag
 
 Press **Run Upsampling**. The button changes to "Upsampling in progress..." and is disabled until the run finishes.
 
-Deep learning runs happen in a background thread that calls out to the container, so napari stays responsive and you can pan and zoom while it works. If the container exits non-zero you get a dialog headed "DL Error" containing "Container DL Inference failed:" followed by the container's own error output. That text is the useful part; see [Troubleshooting](../caveats/troubleshooting.md).
+Deep learning runs happen in a background thread that calls out to the backend, so napari stays responsive and you can pan and zoom while it works. If the backend exits non-zero you get a dialog headed "DL Error" containing "Container DL Inference failed:" followed by its own error output. That text is the useful part; see [Troubleshooting](../caveats/troubleshooting.md). The "Container" in that heading is fixed wording, used for every engine including `Local (bundled)`, where nothing is containerized.
 
 !!! note "CLAHE will freeze the window, briefly"
 
@@ -98,9 +108,9 @@ A layer named `Upsampled AFM` is added with the `magma` colormap and `scale=(0.2
 
     That `0.25` is hardcoded. It is correct for HAT and SwinIR, which are always ×4, and correct for CLAHE at factor 4. At any other CLAHE factor the upsampled layer is drawn at the wrong physical size relative to `Raw AFM`, and the 4-pane grid in panel 4 will show them misaligned while looking plausible. This affects the display only. It does not change the exported measurements, which use the factor separately. See [Known issues](../caveats/known-issues.md).
 
-??? note "What happens inside the container"
+??? note "What happens inside the DL backend"
 
-    The raw array is written to a temporary `.tif`. The plugin then runs `inference.py` inside the container with four bind mounts, at a tile size of 256. Inside, the image is normalized per-image to [0, 1] by its own minimum and maximum, reflect-padded up to a multiple of the model's window size, pushed through the network in overlapping 256-pixel tiles, unpadded, clipped back to [0, 1], and rescaled to the original height range. The result is written as float32 to `<name>_SR4x.tif`, which the plugin reads back into the viewer.
+    The raw array is written to a temporary `.tif`. The plugin then runs `inference.py` at a tile size of 256: inside the container with four bind mounts for `Singularity` and `Docker`, or as a plain subprocess against the real paths for `Local (bundled)`. Inside, the image is normalized per-image to [0, 1] by its own minimum and maximum, reflect-padded up to a multiple of the model's window size, pushed through the network in overlapping 256-pixel tiles, unpadded, clipped back to [0, 1], and rescaled to the original height range. The result is written as float32 to `<name>_SR4x.tif`, which the plugin reads back into the viewer.
 
     Two consequences worth knowing: the per-image min-max normalization means one bright speck rescales the whole scan, and the clip to [0, 1] truncates the tails the network was trained to produce. Both are discussed in [The scale-domain question](../caveats/scale-domain.md).
 
