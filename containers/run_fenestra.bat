@@ -145,6 +145,7 @@ echo Starting FenestRA. When the log below says the desktop is ready, open:
 echo.
 echo     http://localhost:%PORT%
 echo.
+echo Image:            %IMAGE%
 echo Your scans:       %DATA_DIR%   (inside the app: /data)
 echo Your checkpoints: %MODEL_DIR%  (inside the app: /models)
 echo.

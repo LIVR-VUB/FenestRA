@@ -57,6 +57,7 @@ models=$(find "$MODEL_DIR" -maxdepth 1 -type f -name '*.pth' 2>/dev/null | wc -l
 
 echo
 echo "Open http://localhost:${PORT} once the log says the desktop is ready."
+echo "  image:       $IMAGE"
 echo "  scans:       $DATA_DIR  -> /data"
 echo "  checkpoints: $MODEL_DIR -> /models"
 echo
