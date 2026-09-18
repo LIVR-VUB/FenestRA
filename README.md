@@ -370,25 +370,57 @@ the GPU. This is also the route that builds the reference stack.
 ### 2. Create the Host Environment
 Create a clean Anaconda environment optimized for Cellpose targeting CUDA 12.4:
 
+Every version below is the one this documentation was written and verified against, read out of
+a working `fenestra-env` on 18 September 2026. Pinning them is the difference between reproducing
+that environment and resolving a new one, and this stack has already broken twice on an unpinned
+dependency — see the note after the block.
+
 ```bash
 conda create -n fenestra-env -c conda-forge python=3.10 numpy=1.26.4
 conda activate fenestra-env
 
-# Install base GUI tools, Napari, and core scientific dependencies
-# PyQt6 is pinned: napari[all] resolves to an unbounded PyQt6>6.5, and a PyQt6 whose version
-# does not match its own PyQt6-Qt6 is what produces "DLL load failed while importing QtWidgets"
-pip install "napari[all]" "PyQt6==6.11.0" magicgui qtpy scipy scikit-image pandas tifffile "numpy<2" openpyxl
+# 1. Viewer and Qt. PyQt6 AND PyQt6-Qt6 are both pinned: napari[all] asks only for
+#    PyQt6>6.5, and a PyQt6 whose version does not match its own PyQt6-Qt6 is exactly what
+#    produces "DLL load failed while importing QtWidgets" on Windows.
+pip install "napari[all]==0.7.0" "PyQt6==6.11.0" "PyQt6-Qt6==6.11.0" "PyQt6-sip==13.11.1" \
+            "qtpy==2.4.3" "magicgui==0.10.2" "superqt==0.8.1"
 
-# Install PyTorch mapped explicitly to CUDA 12.4 to ensure GPU hardware acceleration works
-pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.4.0 torchvision==0.19.0
+# 2. Scientific stack.
+pip install "numpy==1.26.4" "scipy==1.15.3" "scikit-image==0.25.2" "pandas==2.3.3" \
+            "tifffile==2025.5.10" "openpyxl==3.1.5"
 
-# Install Cellpose for fenestration instance segmentation (pinned: the docs and UI labels describe 4.1.1 behavior)
-pip install cellpose==4.1.1
+# 3. PyTorch, CUDA 12.4. The index URL is what selects the CUDA build; without it you get a
+#    CPU-only wheel that installs perfectly and is simply slow. Install it BEFORE Cellpose,
+#    which would otherwise pull the default PyPI wheel as a dependency.
+pip install --index-url https://download.pytorch.org/whl/cu124 \
+            "torch==2.4.0" "torchvision==0.19.0"
 
-# Install AFMReader for handling raw JPK AFM metadata.
-# pySPM is held below 0.6.3 because 0.6.3 requires NumPy 2; the .jpk path never imports it.
-pip install "pySPM<0.6.3" "AFMReader==0.0.7"
+# 4. Cellpose. Pinned because the UI labels and the documentation describe 4.1.1 behaviour,
+#    and because 4.0.1 changed what model_type and diameter mean.
+pip install "cellpose==4.1.1"
+
+# 5. The .jpk reader. pySPM is pinned to 0.6.2, the last release that accepts NumPy 1.x:
+#    0.6.3 requires numpy>=2, which contradicts everything above. AFMReader never imports it
+#    on the .jpk path, but pip still has to resolve it.
+pip install "pySPM==0.6.2" "AFMReader==0.0.7"
 ```
+
+> [!NOTE]
+> **These pins are not a snapshot of `pip freeze`.** The live `fenestra-env` actually has
+> pySPM 0.6.3 alongside NumPy 1.26.4, which `pip check` reports as broken and which pip would
+> refuse to reproduce. The set above is the resolvable equivalent — verified with
+> `pip install --dry-run`, which lands on the same NumPy, SciPy, scikit-image and tifffile the
+> working environment has.
+
+Check the result before moving on:
+
+```bash
+pip check
+python -c "import napari, torch, cellpose, qtpy; from AFMReader.jpk import load_jpk; \
+print(napari.__version__, torch.__version__, cellpose.version, qtpy.API_NAME)"
+```
+
+`pip check` should print `No broken requirements found`, and PyTorch should report `+cu124`.
 
 ### 3. Install FenestRA
 Since FenestRA is now available as a Python package on PyPI, you can install it directly using pip:
