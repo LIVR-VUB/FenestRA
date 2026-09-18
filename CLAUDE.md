@@ -48,9 +48,13 @@ napari_plugin/
 └── README.md                     — install + usage + changelog + citations
 ```
 
-**No `.github/`. No git tags.** `tests/test_dl_cmd.py` exists as of 0.3.0, but it is one file
-covering one function and **nothing runs it automatically**. If you add anything behavioural,
-there is still no safety net — say so rather than assuming CI catches it.
+**No `.github/`.** `tests/test_dl_cmd.py` and `tests/test_worker_errors.py` exist as of 0.3.0,
+but they cover one function and one invariant, and **nothing runs them automatically**. If you add
+anything behavioural, there is still no safety net — say so rather than assuming CI catches it.
+
+⚠️ **There ARE git tags — the earlier claim that there are none was wrong.** A bare `git tag -l`
+returns empty because tags are not fetched by default; `git ls-remote --tags origin` shows
+`v0.2.2`, `v0.2.11` and `v0.3.0`. Use the remote form before concluding anything about tags.
 
 `dist/` and `src/napari_fenestra.egg-info/` exist on disk but are **gitignored and untracked**
 (`git check-ignore -v` confirms `.gitignore:7:dist/`). They are local build residue. Do not
@@ -372,8 +376,12 @@ Both former defects are fixed in 0.3.0:
   backend are the user's choice) and **`torch`** (it arrives via `cellpose`, and declaring it
   would not change which build pip fetches — only the ordered install in README step 2 secures
   the CUDA wheel).
-- `pyproject.toml` requires `setuptools_scm[toml]>=3.4` but `setup.cfg` pins a static version and
-  **there are no git tags** (`git tag -l` → empty). It does nothing. Harmless leftover.
+- `pyproject.toml` requires `setuptools_scm[toml]>=3.4` and it still does nothing, but not for the
+  reason previously recorded here. Tags **do** exist (`v0.2.2`, `v0.2.11`, `v0.3.0` on the remote —
+  a bare `git tag -l` is empty only because tags are not fetched by default). It is inert because
+  nothing ever *configures* it: there is no `use_scm_version` in `setup.py` and no
+  `[tool.setuptools_scm]` in `pyproject.toml`, so `setup.cfg`'s static `version` wins. Verified by
+  building a wheel after tagging `v0.3.0` — still `napari_fenestra-0.3.0`, unchanged.
 
 ---
 
