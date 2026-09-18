@@ -139,11 +139,20 @@ it. Save your CSV and batch output under `/data`.
 > Either copy them into `%USERPROFILE%\FenestRA\data`, or point the launcher at wherever they
 > already live, without moving anything:
 >
+> ```powershell
+> # PowerShell
+> $env:FENESTRA_DATA = "D:\Microscopy\LSEC"
+> .\containers\run_fenestra.bat
+> ```
+>
 > ```bat
-> cd FenestRA
+> REM Command Prompt
 > set FENESTRA_DATA=D:\Microscopy\LSEC
 > containers\run_fenestra.bat
 > ```
+>
+> Simplest of all, and shell-independent: pass the folder as an argument, or drag it onto the
+> `.bat` in Explorer.
 >
 > On Linux and macOS the same variable works: `FENESTRA_DATA=/path/to/scans containers/run_fenestra.sh`.
 > `FENESTRA_MODELS` does the same for checkpoints. Launch from that same Command Prompt rather than
@@ -206,9 +215,24 @@ device`.
 
 ```bat
 docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
+```
+
+Then select it. **The two Windows shells differ here**, and `set` silently does nothing in
+PowerShell, which is the default terminal on Windows 11:
+
+```powershell
+# PowerShell  (prompt looks like  PS C:\FenestRA> )
+$env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+.\containers\run_fenestra.bat
+```
+
+```bat
+REM Command Prompt  (prompt looks like  C:\FenestRA> )
 set FENESTRA_IMAGE=livrvub/fenestra:cu128
 containers\run_fenestra.bat
 ```
+
+The launcher prints `Image: livrvub/fenestra:cu128` at startup, so you can confirm it took.
 
 It is a second full image (~17 GB more). The standard one is untouched; unset `FENESTRA_IMAGE` to
 go back. Full comparison, including which cards each one drops, in
@@ -223,11 +247,17 @@ resolution, with nothing scaled or blurred. Resize the browser and the desktop f
 `SCREEN` sets only the size the desktop starts at, before a browser has connected. Set it if that
 first moment matters, or if you are connecting with a VNC client that cannot resize:
 
-**Windows** — set it in the same Command Prompt, then start FenestRA from there rather than
-double-clicking:
+**Windows** — set it in the same window, then start FenestRA from there rather than
+double-clicking. PowerShell and Command Prompt use different syntax:
+
+```powershell
+# PowerShell
+$env:SCREEN = "2560x1440"
+.\containers\run_fenestra.bat
+```
 
 ```bat
-cd FenestRA
+REM Command Prompt
 set SCREEN=2560x1440
 containers\run_fenestra.bat
 ```

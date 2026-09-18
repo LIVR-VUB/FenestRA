@@ -160,14 +160,30 @@ Rather than moving your data, point the launcher at where it already lives. `FEN
 
 === "Windows"
 
+    Simplest and shell-independent: pass the folder as an argument, or drag it onto the `.bat` in
+    Explorer.
+
+    ```powershell
+    .\containers\run_fenestra.bat D:\Microscopy\LSEC
+    ```
+
+    As an environment variable instead -- note PowerShell and Command Prompt differ, and `set` is
+    silently useless in PowerShell:
+
+    ```powershell
+    # PowerShell
+    $env:FENESTRA_DATA = "D:\Microscopy\LSEC"
+    .\containers\run_fenestra.bat
+    ```
+
     ```bat
-    cd FenestRA
+    REM Command Prompt
     set FENESTRA_DATA=D:\Microscopy\LSEC
     containers\run_fenestra.bat
     ```
 
-    Launch from that same Command Prompt rather than double-clicking, or the variable will not be
-    set.
+    Either way, launch from that same window rather than double-clicking, or the variable will not
+    reach the launcher.
 
 === "Linux / macOS"
 
@@ -259,7 +275,19 @@ returns `True`, and the first kernel launch dies with
 RuntimeError: CUDA error: no kernel image is available for execution on the device
 ```
 
-=== "Windows"
+=== "Windows (PowerShell)"
+
+    PowerShell is the default terminal on Windows 11. `set` does **not** set an environment
+    variable here -- it is a different command, and it fails silently, leaving you on the standard
+    image and wondering why the GPU error persists.
+
+    ```powershell
+    docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
+    $env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+    .\containers\run_fenestra.bat
+    ```
+
+=== "Windows (Command Prompt)"
 
     ```bat
     docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
@@ -364,10 +392,17 @@ first moment matters, or if you are connecting with a VNC client that cannot res
 
 === "Windows"
 
-    Set it in the same Command Prompt, then start FenestRA from there rather than double-clicking:
+    Set it in the same window, then start FenestRA from there rather than double-clicking.
+    PowerShell and Command Prompt need different syntax:
+
+    ```powershell
+    # PowerShell
+    $env:SCREEN = "2560x1440"
+    .\containers\run_fenestra.bat
+    ```
 
     ```bat
-    cd FenestRA
+    REM Command Prompt
     set SCREEN=2560x1440
     containers\run_fenestra.bat
     ```
