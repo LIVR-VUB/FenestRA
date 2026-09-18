@@ -94,17 +94,60 @@ Git is needed only for this step, to fetch the recipe. It is not a dependency of
 
 ### 4. Build the image, once
 
-**Windows** (Command Prompt, from the `FenestRA` folder):
+**There are two recipes. Build one — the one that matches your GPU.** They differ only in which
+PyTorch they carry, and no PyTorch build covers every card.
 
-```bat
+Find out which you need:
+
+```powershell
+nvidia-smi --query-gpu=name,compute_cap --format=csv
+```
+
+```text
+name, compute_cap
+NVIDIA GeForce RTX 5070, 12.0
+```
+
+| `compute_cap` | Cards | Build this |
+|---|---|---|
+| **12.0** or **10.0** | RTX 5060/5070/5080/5090, B100, B200 (Blackwell) | **`Dockerfile.allinone.cu128`** |
+| 8.9, 8.6, 8.0, 7.5, 7.0 | RTX 40/30/20-series, GTX 16-series, A4000, A100, H100, V100, T4 | `Dockerfile.allinone` *(either works; this one is closer to the validated stack)* |
+| 6.x or 5.x | GTX 10-series and older (Pascal, Maxwell) | **`Dockerfile.allinone`** — the cu128 recipe drops these |
+| no GPU / no NVIDIA | — | `Dockerfile.allinone`, CPU only |
+
+#### Most GPUs — the standard image
+
+```powershell
 docker build -t livrvub/fenestra:latest -f containers\Dockerfile.allinone .
 ```
 
-**Linux / macOS:**
-
 ```bash
+# Linux / macOS
 docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
 ```
+
+Nothing further to set: the launcher uses this one by default.
+
+#### RTX 50-series / Blackwell — the cu128 image
+
+The standard image has no `sm_120` kernels. Your card is detected, reports as available, and then
+dies on the first kernel with `CUDA error: no kernel image is available for execution on the
+device`. So build this instead, and tell the launcher to use it:
+
+```powershell
+docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
+$env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+```
+
+```bash
+# Linux / macOS
+docker build -t livrvub/fenestra:cu128 -f containers/Dockerfile.allinone.cu128 .
+export FENESTRA_IMAGE=livrvub/fenestra:cu128
+```
+
+> [!WARNING]
+> You do not need both. Each is 16-25 GB of content and they share almost nothing. If you built
+> the wrong one first, delete it: `docker rmi livrvub/fenestra:latest` (or `:cu128`).
 
 This downloads several gigabytes and takes a while. You do it once. Budget about **17 GB of disk**
 for the finished image.
@@ -208,10 +251,8 @@ Usage from here is identical to the desktop app — see [Usage](#usage).
 
 ### RTX 50-series (Blackwell) GPUs
 
-Building `containers\Dockerfile.allinone.cu128` instead gives you a PyTorch with `sm_120` kernels.
-The standard image has none, so an RTX 5070/5080/5090 is detected, reports as available, and then
-fails on the first kernel with `CUDA error: no kernel image is available for execution on the
-device`.
+Covered in [step 4](#4-build-the-image-once): build `containers\Dockerfile.allinone.cu128` and set
+`FENESTRA_IMAGE`. The rest of this section is how to select it in each Windows shell.
 
 ```bat
 docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .

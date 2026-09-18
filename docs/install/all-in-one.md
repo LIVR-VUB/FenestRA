@@ -85,7 +85,36 @@ cd FenestRA
 ## Step 4 — Build the image, once
 
 The image is not on Docker Hub — `docker pull` will not find it. You build it yourself, from the
-recipe you just cloned:
+recipe you just cloned.
+
+### First: which of the two recipes?
+
+There are two, and **you build one**. They differ only in which PyTorch they carry, because no
+single PyTorch build has kernels for every GPU generation. Ask your card:
+
+```bash
+nvidia-smi --query-gpu=name,compute_cap --format=csv
+```
+
+```text
+name, compute_cap
+NVIDIA GeForce RTX 5070, 12.0
+```
+
+| `compute_cap` | Cards | Build |
+|---|---|---|
+| **12.0**, **10.0** | RTX 5060/5070/5080/5090, B100, B200 (Blackwell) | **`Dockerfile.allinone.cu128`** |
+| 8.9, 8.6, 8.0, 7.5, 7.0 | RTX 40/30/20-series, GTX 16-series, A4000, A100, H100, V100, T4 | `Dockerfile.allinone` — either works, this one is closer to the validated stack |
+| 6.x, 5.x | GTX 10-series and older (Pascal, Maxwell) | **`Dockerfile.allinone`** — cu128 drops these |
+| no NVIDIA GPU | — | `Dockerfile.allinone`, CPU only |
+
+!!! warning "Build one, not both"
+
+    Each image is 16–25 GB of content and they share almost nothing. If you build the wrong one
+    first, remove it with `docker rmi livrvub/fenestra:latest` (or `:cu128`) rather than leaving
+    both on disk.
+
+### Most GPUs: the standard image
 
 === "Windows"
 
@@ -98,6 +127,38 @@ recipe you just cloned:
     ```bash
     docker build -t livrvub/fenestra:latest -f containers/Dockerfile.allinone .
     ```
+
+Nothing else to configure — the launchers use this tag by default.
+
+### RTX 50-series and Blackwell: the cu128 image
+
+The standard image carries no `sm_120` kernels, and the failure is late: the card is detected,
+`torch.cuda.is_available()` returns `True`, and the first kernel launch raises
+`CUDA error: no kernel image is available for execution on the device`.
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
+    $env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
+    ```
+
+=== "Windows (Command Prompt)"
+
+    ```bat
+    docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
+    set FENESTRA_IMAGE=livrvub/fenestra:cu128
+    ```
+
+=== "Linux / macOS"
+
+    ```bash
+    docker build -t livrvub/fenestra:cu128 -f containers/Dockerfile.allinone.cu128 .
+    export FENESTRA_IMAGE=livrvub/fenestra:cu128
+    ```
+
+`FENESTRA_IMAGE` has to be set in the **same window** you launch from, every session. The launcher
+prints `Image: livrvub/fenestra:cu128` at startup so you can see whether it took.
 
 It downloads several gigabytes and takes a while. You do it once.
 
@@ -264,46 +325,32 @@ as it does in the desktop app — follow the [User Guide](../guide/index.md).
         VNC_PASSWORD=something-long containers/run_fenestra.sh
         ```
 
-## RTX 50-series (Blackwell) needs the other recipe
+## The two images, compared
 
-If your GPU is an RTX 5070, 5080, 5090 or another Blackwell card, build
-`containers/Dockerfile.allinone.cu128` instead. The standard image's PyTorch has no kernels for
-those cards, and the failure is late and ugly: the card is detected, `torch.cuda.is_available()`
-returns `True`, and the first kernel launch dies with
+Which to build is decided in [step 4](#first-which-of-the-two-recipes). This is what actually
+differs, and what each one gives up.
 
-```text
-RuntimeError: CUDA error: no kernel image is available for execution on the device
-```
+| | Standard image | `cu128` variant |
+|---|---|---|
+| GPU architectures | `sm_50` … `sm_90` | `sm_70` … `sm_120` |
+| Covers | GTX 10-series through H100 | RTX 20-series through RTX 50-series |
+| Does **not** cover | RTX 50-series | Maxwell, Pascal (GTX 10-series) |
+| GUI PyTorch | 2.4.0 + cu124 | 2.8.0 + cu128 |
+| Backend PyTorch | 2.1.2 | 2.8.0 + cu128 |
 
-=== "Windows (PowerShell)"
+Both arch lists were measured with `torch._C._cuda_getArchFlags()`, not assumed.
 
-    PowerShell is the default terminal on Windows 11. `set` does **not** set an environment
-    variable here -- it is a different command, and it fails silently, leaving you on the standard
-    image and wondering why the GPU error persists.
+!!! warning "The cu128 variant is further still from the reference stack"
 
-    ```powershell
-    docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
-    $env:FENESTRA_IMAGE = "livrvub/fenestra:cu128"
-    .\containers\run_fenestra.bat
-    ```
+    The validated backend is torch **1.14**; the standard image is already on 2.1.2, and this one
+    is on 2.8.0. Same architectures, same weights, different kernels. There is a real tension here
+    that cannot be engineered away: a Blackwell card **cannot** run the reference stack, so "use
+    the validated stack" and "use this GPU" are mutually exclusive. If numbers are going into the
+    manuscript, produce them with `containers/dl_upsampling.def` on a card it supports.
 
-=== "Windows (Command Prompt)"
-
-    ```bat
-    docker build -t livrvub/fenestra:cu128 -f containers\Dockerfile.allinone.cu128 .
-    set FENESTRA_IMAGE=livrvub/fenestra:cu128
-    containers\run_fenestra.bat
-    ```
-
-=== "Linux / macOS"
-
-    ```bash
-    docker build -t livrvub/fenestra:cu128 -f containers/Dockerfile.allinone.cu128 .
-    FENESTRA_IMAGE=livrvub/fenestra:cu128 containers/run_fenestra.sh
-    ```
-
-It is a second full image, so budget another ~17 GB. The standard one is untouched, and dropping
-`FENESTRA_IMAGE` switches back.
+    The one-line `basicsr` patch this variant requires is the same correction BasicSR made
+    upstream; it is verified at build time, which then runs a real HAT forward pass so a torch
+    that cannot execute the model fails the build rather than a user's scan.
 
 ### The complete sequence, confirmed working
 
@@ -327,28 +374,6 @@ GPU: NVIDIA GeForce RTX 5070 (sm_120, CUDA 12.8)
 
 Right image, right folder, usable GPU. If any one of them is not what you expect, stop there
 rather than finding out mid-scan.
-
-| | Standard image | `cu128` variant |
-|---|---|---|
-| GPU architectures | `sm_50` … `sm_90` | `sm_70` … `sm_120` |
-| Covers | GTX 10-series through H100 | RTX 20-series through RTX 50-series |
-| Does **not** cover | RTX 50-series | Maxwell, Pascal (GTX 10-series) |
-| GUI PyTorch | 2.4.0 + cu124 | 2.8.0 + cu128 |
-| Backend PyTorch | 2.1.2 | 2.8.0 + cu128 |
-
-Both arch lists were measured with `torch._C._cuda_getArchFlags()`, not assumed.
-
-!!! warning "The cu128 variant is further still from the reference stack"
-
-    The validated backend is torch **1.14**; the standard image is already on 2.1.2, and this one
-    is on 2.8.0. Same architectures, same weights, different kernels. There is a real tension here
-    that cannot be engineered away: a Blackwell card **cannot** run the reference stack, so "use
-    the validated stack" and "use this GPU" are mutually exclusive. If numbers are going into the
-    manuscript, produce them with `containers/dl_upsampling.def` on a card it supports.
-
-    The one-line `basicsr` patch this variant requires is the same correction BasicSR made
-    upstream; it is verified at build time, which then runs a real HAT forward pass so a torch
-    that cannot execute the model fails the build rather than a user's scan.
 
 ## Model weights are not included
 
