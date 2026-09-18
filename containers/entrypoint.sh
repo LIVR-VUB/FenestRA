@@ -63,7 +63,27 @@ websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/dev/null 2>&1 &
 /opt/venv-gui/bin/python - <<'PY' || true
 import torch
 if torch.cuda.is_available():
-    print(f"GPU: {torch.cuda.get_device_name(0)} (CUDA {torch.version.cuda})")
+    name = torch.cuda.get_device_name(0)
+    major, minor = torch.cuda.get_device_capability(0)
+    sm = f"sm_{major}{minor}"
+    arches = [a for a in torch.cuda.get_arch_list() if a.startswith("sm_")]
+    # An empty list means torch could not report what it was built for; say nothing rather than
+    # claim the card is unsupported on no evidence.
+    if not arches or sm in arches:
+        print(f"GPU: {name} ({sm}, CUDA {torch.version.cuda})")
+    else:
+        # torch.cuda.is_available() is True for a card this build cannot actually run: the GPU is
+        # visible, every kernel that touches it raises. Reporting it as working is precisely the
+        # silent-failure shape this project exists to avoid, so check the architecture, not just
+        # visibility. Newer cards than the build knows about land here - an RTX 50-series is
+        # sm_120, which needs a cu128 build of torch.
+        print("=" * 72)
+        print(f"WARNING: {name} reports {sm}, which this PyTorch build cannot run.")
+        print(f"  This build supports: {' '.join(arches)}")
+        print("  The card is visible but every CUDA kernel will fail, so Cellpose and the")
+        print("  deep-learning methods will not work. CLAHE (CPU) still does.")
+        print("  This is a limitation of the image, not of your machine.")
+        print("=" * 72)
 else:
     print("=" * 72)
     print("WARNING: no GPU visible inside the container.")
