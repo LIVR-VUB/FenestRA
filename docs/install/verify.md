@@ -118,17 +118,15 @@ passthrough problem does not look like a model problem.
 === "Windows / macOS (Docker)"
 
     ```bash
-    docker run --rm --gpus all livrvub/dl-upsampling:latest -c "import torch; print(torch.cuda.is_available())"
+    docker run --rm --gpus all livrvub/dl-upsampling:latest python -c "import torch; print(torch.cuda.is_available())"
     ```
 
-    Note the absent `python`: the image already has `python` as its entrypoint, so the arguments
-    you pass are appended to it. That is also the reason the plugin's own Docker command currently
-    fails, since it supplies a second `python`. See
-    [Container backend](container-backend.md).
+    The explicit `python` is required: the image declares no `ENTRYPOINT` of its own, so the
+    command you pass is the whole command. This matches what the plugin sends.
 
-    This form assumes the shipped `ENTRYPOINT ["python"]` is unchanged. If you fixed the Docker
-    path by editing the Dockerfile rather than the plugin, put `python` back into the command
-    above or the container has nothing to execute.
+    If this fails with `can't open file '/opt/python'`, your image was built from a checkout that
+    still had `ENTRYPOINT ["python"]` in the Dockerfile. Rebuild it. See
+    [Container backend](container-backend.md).
 
 Then run it through the plugin: set **Method** to `HAT` or `SwinIR`, fill in **DL Model** with your
 `.pth`, set **Engine** to match the image you built, and click **Run Upsampling**. Success looks

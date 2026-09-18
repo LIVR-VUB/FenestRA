@@ -63,7 +63,7 @@ CPU-only PyTorch wheel, which installs cleanly and gives no error.
 ## Install Cellpose
 
 ```bash
-pip install cellpose
+pip install cellpose==4.1.1
 ```
 
 Cellpose does the fenestration segmentation in panel 3. The documentation here describes
@@ -77,6 +77,10 @@ fields.
 ```bash
 pip install git+https://github.com/AFM-SPM/AFMReader.git
 ```
+
+That command shells out to `git`, so `git` must be on your `PATH`. Windows does not ship it —
+install [Git for Windows](https://git-scm.com/download/win) first, or pip stops with
+`ERROR: Cannot find command 'git'`.
 
 AFMReader is the only reader for `.jpk-qi-image` files in the pipeline. It returns both the height
 array and the scan's nanometers-per-pixel scale, and that scale is what converts every measurement

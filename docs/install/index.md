@@ -59,7 +59,7 @@ load a scan, segment it, and export measurements.
 | Build command | `sudo apptainer build dl_upsampling.sif containers/dl_upsampling.def` | `docker build -t livrvub/dl-upsampling:latest -f Dockerfile ..` |
 | **Engine** dropdown in panel 2 | `Singularity` | `Docker` |
 | What you type next to it | the full path to your `.sif` file | the tag `livrvub/dl-upsampling:latest` |
-| Status | working | the Docker argv is currently broken, see [Known issues](../caveats/known-issues.md) |
+| Status | working | working; rebuild any image built before September 2026, see [Known issues](../caveats/known-issues.md) |
 
 The CLAHE path behaves identically on all three operating systems, because it never touches a
 container.

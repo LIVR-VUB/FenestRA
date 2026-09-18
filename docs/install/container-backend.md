@@ -46,8 +46,28 @@ That gives you `containers/dl_upsampling.def` (Apptainer) and `containers/Docker
 
 === "Windows / macOS (Docker)"
 
-    Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then build from the
-    `containers/` directory. No `sudo` is needed on Windows or macOS:
+    Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) first.
+
+    **On Windows, set up GPU passthrough before you build.** Docker can only reach an NVIDIA GPU
+    through the WSL 2 backend, and the plugin always passes `--gpus all`:
+
+    1. In Docker Desktop, enable *Settings → General → "Use the WSL 2 based engine"*. The Hyper-V
+       backend has no GPU support, and `--gpus all` fails on it outright.
+    2. Install or update the NVIDIA driver **on Windows itself**. Do not install a driver or the
+       CUDA toolkit inside WSL — the Windows driver is what publishes the GPU into the distro.
+    3. If you launch napari from inside WSL rather than from Windows, enable that distro under
+       *Settings → Resources → WSL Integration*.
+    4. Check the passthrough before building anything, because the build is slow and this is not:
+
+        ```bash
+        docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+        ```
+
+        It must print your GPU table. `could not select device driver "" with capabilities:
+        [[gpu]]` means the passthrough is not set up, and **Run Upsampling** will fail on the
+        same flag.
+
+    Then build from the `containers/` directory. No `sudo` is needed on Windows or macOS:
 
     ```bash
     cd containers
@@ -56,12 +76,22 @@ That gives you `containers/dl_upsampling.def` (Apptainer) and `containers/Docker
 
     The trailing `..` is the build context, so run the command from inside `containers/`.
 
+    Expect the first build to be long and large: the base image is
+    `nvcr.io/nvidia/pytorch:23.01-py3`, several gigabytes before the recipe's own layers. Raise
+    Docker Desktop's disk allocation under *Settings → Resources* if the build runs out of space.
+
+    On Windows, the four bind mounts described at the bottom of this page are host paths: your
+    temp directory, the output directory, the folder holding the `.pth`, and site-packages. The
+    WSL 2 backend shares these for you. On Hyper-V each drive must be shared explicitly, and an
+    unshared drive mounts as an empty directory rather than raising an error.
+
     In napari, set **Engine** to `Docker`. The field next to it changes to **Docker Tag:** and is
     filled with `livrvub/dl-upsampling:latest` for you. There is no file to browse for.
 
-    !!! warning "This path does not currently work"
+    !!! note "Rebuild if your image predates the ENTRYPOINT fix"
 
-        See the section below before you spend time on it.
+        See [the section below](#the-docker-entrypoint-fix) if you built this image from an older
+        checkout.
 
 !!! note "`livrvub/dl-upsampling:latest` is a local tag"
 
@@ -69,31 +99,29 @@ That gives you `containers/dl_upsampling.def` (Apptainer) and `containers/Docker
     the build command above attaches to the image on your own machine, and the plugin's default
     text matches that label so the two line up after you build.
 
-## The Docker engine path is currently broken
+## The Docker ENTRYPOINT fix
 
-`containers/Dockerfile` ends with `ENTRYPOINT ["python"]`, and the plugin appends its own
-`python /opt/dl_project/scripts/inference.py ...` as the command. Docker concatenates ENTRYPOINT
-and CMD, so the container tries to run `python python /opt/dl_project/scripts/inference.py` and
-dies with:
+`containers/Dockerfile` used to end with `ENTRYPOINT ["python"]`. The plugin appends its own
+`python /opt/dl_project/scripts/inference.py ...` as the command, and Docker concatenates
+ENTRYPOINT with that command, so the container ran
+`python python /opt/dl_project/scripts/inference.py` and died with:
 
 ```text
 can't open file '/opt/python': [Errno 2] No such file or directory
 ```
 
-Python is being handed the literal string `python` as the name of the script to execute.
+Python was being handed the literal string `python` as the name of the script to execute.
 
-Either one of these fixes it, and only one is needed:
+The `ENTRYPOINT` line has been removed from the Dockerfile, so an image built from the current
+repository is correct and needs nothing from you. **If you see the error above, your image was
+built from an older checkout** — `git pull` and `docker build` again.
 
-```text
-1. Edit containers/Dockerfile: replace ENTRYPOINT ["python"] with ENTRYPOINT [] (or CMD ["python"]),
-   then rebuild the image.
-2. Edit src/fenestra/pipeline.py: remove the "python" element from the Docker argv list.
-   It appears in two places, the interactive block and the batch block, and both must be changed.
-```
+The image now inherits the NVIDIA base image's own entrypoint, which execs whatever command it is
+given, so the plugin's `python ...` arrives intact.
 
-The Apptainer path is unaffected. `singularity exec` bypasses the container's `%runscript`, so the
-explicit `python` is required there. The two engines genuinely need different argv, which is how
-the mismatch arose. Tracked in [Known issues](../caveats/known-issues.md).
+The Apptainer path was never affected. `singularity exec` bypasses the container's `%runscript`, so
+the explicit `python` is required there. The two engines genuinely need different argv, which is
+how the mismatch arose in the first place. History in [Known issues](../caveats/known-issues.md).
 
 !!! note "`--gpus all` on macOS"
 

@@ -96,27 +96,16 @@ The Singularity definition file defines a `%runscript` at `dl_upsampling.def:71-
 
 `singularity exec` does not use `%runscript`. It runs the command you give it, so the explicit `python` in the argv above is required. The Singularity path is correct as written.
 
-The Dockerfile ends with:
+The Dockerfile declares no `ENTRYPOINT` of its own. Docker concatenates `ENTRYPOINT` with the command you pass, so an entrypoint of `python` would make the image supply one `python` and the host a second. The image instead inherits the NVIDIA base image's entrypoint, which execs the command as given, and the host's explicit `python` arrives intact.
 
-```text
-ENTRYPOINT ["python"]
-```
-
-Docker concatenates `ENTRYPOINT` and the command you pass, so the image already supplies `python`. The host adds a second one.
-
-!!! danger "The Docker engine currently fails"
-    The resulting argv inside the container is `python python /opt/dl_project/scripts/inference.py ...`. Python treats the literal string `python` as the script path and exits with:
+!!! warning "Images built before this fix still fail"
+    The Dockerfile used to end with `ENTRYPOINT ["python"]`. The resulting argv inside the container was `python python /opt/dl_project/scripts/inference.py ...`. Python treated the literal string `python` as the script path and exited with:
 
     ```text
     can't open file '/opt/python': [Errno 2] No such file or directory
     ```
 
-    Either fix works, and only one is needed:
-
-    - Remove `"python"` from the argv list in **both** `pipeline.py:84-97` and `pipeline.py:241-255`, or
-    - Change the Dockerfile's last line to `ENTRYPOINT []` and add `CMD ["python"]`, then rebuild the image.
-
-    Editing only one of the two `pipeline.py` blocks fixes the interactive path and leaves the batch path broken. This is tracked on [Known Issues](../caveats/known-issues.md).
+    An image built from the current repository does not have this problem. Seeing that error means the image predates the fix and needs rebuilding. Tracked on [Known Issues](../caveats/known-issues.md).
 
 ## The output file
 

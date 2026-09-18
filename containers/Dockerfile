@@ -62,5 +62,7 @@ ENV PATH="${CUDA_HOME}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
 ENV CUDA_VISIBLE_DEVICES=0
 
-# Provide identical baseline run logic
-ENTRYPOINT ["python"]
+# No ENTRYPOINT. The plugin passes the full command itself
+# ("python /opt/dl_project/scripts/inference.py ..."), and Docker concatenates ENTRYPOINT with
+# that command. An ENTRYPOINT of ["python"] here would produce "python python ..." inside the
+# container. The NVIDIA base image's own entrypoint is inherited and execs the command as given.

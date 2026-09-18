@@ -103,7 +103,7 @@ Raised whenever the container process exits with a non-zero status, at `pipeline
 
 | Last lines of stderr | Cause | Fix |
 |---|---|---|
-| `can't open file '/opt/python'` | Docker ENTRYPOINT concatenation | See the next section. |
+| `can't open file '/opt/python'` | The Docker image predates the ENTRYPOINT fix | Rebuild it. See the next section. |
 | `Error(s) in loading state_dict`, with size mismatches | The checkpoint is a different architecture than the Method dropdown selected, or it uses `embed_dim=96` and `depths=[6]*4`, which the plugin cannot build (`inference.py:47-70`, `strict=True` at `:87`) | Switch the Method to match the checkpoint, or use an `embed_dim=180` checkpoint. See [Known issues](known-issues.md#7-only-embed_dim-180-checkpoints-load). |
 | `ImportError: HAT arch could not be imported` | The container does not have HAT at `/opt/HAT` | Rebuild the container from the recipe in `containers/`. See [Container backend](../install/container-backend.md). |
 | `SwinIR arch could not be imported` | The container has neither basicsr's SwinIR nor `/opt/SwinIR` | Rebuild the container. |
@@ -133,24 +133,23 @@ The interactive path wraps the subprocess call and reports it this way (`pipelin
 python: can't open file '/opt/python': [Errno 2] No such file or directory
 ```
 
-**Cause.** `containers/Dockerfile` ends with `ENTRYPOINT ["python"]`, and the plugin appends its own `python /opt/dl_project/scripts/inference.py ...` as the command (`pipeline.py:91` and `:249`). Docker concatenates ENTRYPOINT and CMD, so the container runs `python python /opt/dl_project/scripts/inference.py` and Python treats the literal word `python` as the script path.
+**Cause.** Your Docker image was built from a checkout where `containers/Dockerfile` still ended with `ENTRYPOINT ["python"]`. The plugin appends its own `python /opt/dl_project/scripts/inference.py ...` as the command (`pipeline.py:91` and `:249`), and Docker concatenates ENTRYPOINT and CMD, so the container runs `python python /opt/dl_project/scripts/inference.py` and Python treats the literal word `python` as the script path.
 
-**Fix, option A: change the image.** Replace the last line of `containers/Dockerfile` with:
-
-```text
-ENTRYPOINT []
-CMD ["python"]
-```
-
-then rebuild from the `containers/` directory:
+**Fix.** The `ENTRYPOINT` line has been removed from the Dockerfile. Update the repository and rebuild:
 
 ```bash
+git pull
+cd containers
 docker build -t livrvub/dl-upsampling:latest -f Dockerfile ..
 ```
 
-**Fix, option B: change the plugin.** Remove the `"python",` element from the Docker argv list in **both** `pipeline.py:91` and `pipeline.py:249`. Both blocks must be edited, or the batch path will behave differently from the interactive path.
+Confirm the rebuilt image before returning to napari:
 
-**On Linux**, switch **Engine** to Singularity. That path is unaffected, because `singularity exec` bypasses the container's runscript and needs the explicit `python`.
+```bash
+docker run --rm livrvub/dl-upsampling:latest python -c "print('ok')"
+```
+
+**On Linux**, you can also switch **Engine** to Singularity while you rebuild. That path was never affected, because `singularity exec` bypasses the container's runscript and needs the explicit `python`.
 
 ## No output generated from DL Upsampling
 

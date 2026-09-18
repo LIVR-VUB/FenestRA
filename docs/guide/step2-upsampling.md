@@ -60,9 +60,9 @@ Before it starts a deep learning run, the plugin checks that **DL Model** points
 
     The two values it writes are developer paths from the machine the plugin was built on. **DL Model** and **Singularity (.sif)** both ship pre-filled with `/home/arka/Desktop/AFM-Project/DL_Upsampling/...`, which will not exist on your system. Replace both with your own paths.
 
-!!! danger "The Docker engine does not currently work"
+!!! warning "Rebuild a Docker image built before September 2026"
 
-    The Docker command as built by the plugin fails inside the container before inference starts. The failure is loud and produces no output file. The cause and the one-line fix are in [Known issues](../caveats/known-issues.md).
+    The Dockerfile used to declare `ENTRYPOINT ["python"]`, which made the container fail loudly before inference started and produced no output file. The line has been removed. An image built from an older checkout still carries it, so rebuild if you hit `can't open file '/opt/python'`. Details in [Known issues](../caveats/known-issues.md).
 
 ## Apply Post-DL Sharpening
 

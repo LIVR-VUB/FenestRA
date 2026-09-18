@@ -47,6 +47,10 @@ By combining Deep Learning-based Super Resolution (HAT / SwinIR) with automated 
 ### 1. Requirements
 - Python 3.10+
 - An NVIDIA GPU with CUDA 12.4 drivers (recommended for DL inference)
+- **Git.** One dependency (`AFMReader`) is installed straight from a git repository, so `pip`
+  needs a working `git` on your `PATH`. On Windows this is not present by default — install
+  [Git for Windows](https://git-scm.com/download/win) first, or step 2 fails with
+  `ERROR: Cannot find command 'git'`.
 
 > [!CAUTION]
 > <small>**Hardware Compatibility Warning:** FenestRA requires deep learning hardware capable of running modern tensor operations. Extremely old legacy GPUs based on the Maxwell architecture (Compute Capability 5.2 or earlier, such as the Quadro M4000) physically lack hardware support for BFloat16 (`CUDA_R_16BF`) math. Running the plugin on these ancient GPUs will cause PyTorch and Cellpose to instantly crash with a `CUBLAS_STATUS_NOT_SUPPORTED` error.</small>
@@ -67,8 +71,8 @@ pip install "napari[all]" magicgui qtpy scipy scikit-image pandas tifffile "nump
 # Install PyTorch mapped explicitly to CUDA 12.4 to ensure GPU hardware acceleration works
 pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.4.0 torchvision==0.19.0
 
-# Install Cellpose for fenestration instance segmentation
-pip install cellpose
+# Install Cellpose for fenestration instance segmentation (pinned: the docs and UI labels describe 4.1.1 behavior)
+pip install cellpose==4.1.1
 
 # Install AFMReader for handling raw JPK AFM metadata
 pip install git+https://github.com/AFM-SPM/AFMReader.git
@@ -95,23 +99,22 @@ pip install --upgrade napari-fenestra
 
 FenestRA runs its massive deep learning architectures completely independently from the modern Napari UI. You must compile the container engine based on your Operating System.
 
-> [!WARNING]
-> **The Docker engine path is currently broken.** `containers/Dockerfile` ends with
-> `ENTRYPOINT ["python"]`, and `pipeline.py` also passes `python` as the first element of the
-> command. Docker concatenates ENTRYPOINT and CMD, so the container tries to run
-> `python python /opt/dl_project/scripts/inference.py` and exits with:
+> [!NOTE]
+> **If you built the Docker image before this fix, rebuild it.** `containers/Dockerfile` used to
+> end with `ENTRYPOINT ["python"]`. The plugin also passes `python` as the first element of the
+> command, and Docker concatenates ENTRYPOINT with that command, so the container ran
+> `python python /opt/dl_project/scripts/inference.py` and exited with:
 >
 > ```text
 > can't open file '/opt/python': [Errno 2] No such file or directory
 > ```
 >
-> Either fix works, and only one is needed: set `ENTRYPOINT []` in the Dockerfile and rebuild, or
-> remove the `"python"` element from the Docker argv list in `src/fenestra/pipeline.py` (it appears
-> twice, in the interactive block and the batch block, and both must be changed).
+> The `ENTRYPOINT` line has been removed, so a freshly built image is correct. An image built from
+> an older checkout still carries the bad `ENTRYPOINT` — `docker build` again to pick up the fix.
 >
-> The Apptainer / Singularity path is unaffected: `singularity exec` bypasses the container's
+> The Apptainer / Singularity path was never affected: `singularity exec` bypasses the container's
 > `%runscript`, so the explicit `python` is required there. That is why the two engines need
-> different argv.
+> different argv, and why only one of the two recipes had to change.
 
 First, clone the repository to download the Docker and Singularity setup files:
 ```bash
@@ -121,13 +124,59 @@ cd FenestRA
 
 **For Windows & macOS Users (Docker Desktop):**
 Because Apple and Windows systems cannot securely install Singularity, we use Docker.
-1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine.
-2. Open a terminal and navigate to this repository's `containers/` directory.
-3. Build the backend image (Windows/Mac users do NOT need `sudo`):
+
+<details>
+<summary><b>Windows — prerequisites, do these before you build</b></summary>
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+2. Turn on the **WSL 2 backend**: *Settings → General → "Use the WSL 2 based engine"*.
+   GPU passthrough only exists on the WSL 2 backend. The Hyper-V backend cannot expose an NVIDIA
+   GPU at all, and `--gpus all` — which FenestRA always passes — will fail on it.
+3. Install or update the **NVIDIA driver on Windows itself**. Do **not** install a driver or the
+   CUDA toolkit inside WSL; the Windows driver is what publishes the GPU into WSL, and installing
+   a second one inside the distro breaks it.
+4. If you launch napari from inside a WSL distro rather than from Windows, enable that distro
+   under *Settings → Resources → WSL Integration*.
+5. Prove the GPU is actually reaching containers **before** you spend an hour building:
+
+   ```bash
+   docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+   ```
+
+   This must print your GPU table. If it prints
+   `could not select device driver "" with capabilities: [[gpu]]`, the passthrough is not
+   configured, and the plugin's **Run Upsampling** will fail on exactly the same flag.
+
+6. **Disk and time.** The base image is `nvcr.io/nvidia/pytorch:23.01-py3` and it is several
+   gigabytes before any of the recipe's own layers. Give Docker Desktop enough disk
+   (*Settings → Resources*) and expect the first build to take a long time. Later builds reuse
+   the layer cache.
+
+7. **Drive sharing.** The plugin bind-mounts four host directories into the container: your
+   Windows temp directory, the output directory, the folder holding your `.pth` model, and the
+   installed `fenestra/backend/` directory inside site-packages. On the WSL 2 backend these are
+   shared for you. On Hyper-V you must share each drive explicitly, and a model file sitting on a
+   drive you have not shared will mount as an empty directory rather than raise an error.
+</details>
+
+Build the backend image (Windows and macOS users do **not** need `sudo`):
 ```bash
+cd containers
 docker build -t livrvub/dl-upsampling:latest -f Dockerfile ..
 ```
-*(In Napari, select **Docker** from the Engine dropdown. No file browsing needed!)*
+The trailing `..` is the build context, so run the command from inside `containers/`.
+`livrvub/dl-upsampling:latest` is only a **local tag** — it is not on Docker Hub and `docker pull`
+will not find it. The plugin's Engine field is pre-filled with that exact string so the two line up
+once you have built it.
+
+*(In Napari, select **Docker** from the Engine dropdown. No file browsing needed!)* The dropdown
+defaults to **Singularity**, so Windows and macOS users must switch it every time the widget is
+opened, and switching it back re-fills the path box with a Linux developer path.
+
+> [!NOTE]
+> **macOS has no GPU path.** Docker Desktop for macOS has no NVIDIA passthrough, so the `--gpus
+> all` that FenestRA always passes has no hardware to expose and the run is expected to fail at
+> that flag. The CLAHE (CPU) upsampling method does not launch a container and is unaffected.
 
 **For Native Linux Users (Singularity / Apptainer):**
 Linux systems heavily restrict Docker permissions. For ultimate performance and hassle-free paths on Linux, use Apptainer/Singularity.

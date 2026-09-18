@@ -16,7 +16,7 @@ Verified defects in FenestRA 0.2.11, ordered by how much they can change a publi
 | 1 | [Batch drops images where Cellpose finds nothing](#1-batch-drops-images-where-cellpose-finds-nothing) | Silent |
 | 2 | [Quantify reads the live Method dropdown](#2-quantify-reads-the-live-method-dropdown) | Silent |
 | 3 | [The hardcoded 0.25 layer scale](#3-the-hardcoded-025-layer-scale) | Silent (display) |
-| 4 | [The Docker engine path is broken](#4-the-docker-engine-path-is-broken) | Loud |
+| 4 | [Stale Docker images carry the old ENTRYPOINT](#4-stale-docker-images-carry-the-old-entrypoint) | Loud |
 | 5 | [No scale check before inference](#5-no-scale-check-before-inference) | Silent |
 | 6 | [Cellpose 4 label drift](#6-cellpose-4-label-drift) | Silent |
 | 7 | [Only embed_dim 180 checkpoints load](#7-only-embed_dim-180-checkpoints-load) | Loud |
@@ -89,7 +89,7 @@ for name in ("Upsampled AFM", "Cellpose Masks", "Overlay"):
 
 ---
 
-### 4. The Docker engine path is broken
+### 4. Stale Docker images carry the old ENTRYPOINT
 
 **Severity:** Loud
 
@@ -99,17 +99,21 @@ for name in ("Upsampled AFM", "Cellpose Masks", "Overlay"):
 python: can't open file '/opt/python': [Errno 2] No such file or directory
 ```
 
-**Why.** `containers/Dockerfile` ends with `ENTRYPOINT ["python"]`, and the plugin appends its own `python /opt/dl_project/scripts/inference.py ...` as the command (`pipeline.py:91` interactive, `pipeline.py:249` batch). Docker concatenates ENTRYPOINT and CMD, so the process inside the container is `python python /opt/dl_project/scripts/inference.py`, and Python treats the literal string `python` as the script path.
+**Why.** `containers/Dockerfile` used to end with `ENTRYPOINT ["python"]`, while the plugin appends its own `python /opt/dl_project/scripts/inference.py ...` as the command (`pipeline.py:91` interactive, `pipeline.py:249` batch). Docker concatenates ENTRYPOINT and CMD, so the process inside the container was `python python /opt/dl_project/scripts/inference.py`, and Python treated the literal string `python` as the script path.
 
-**Consequence for your data.** None. Nothing runs. Docker is the documented backend on Windows and macOS, so the deep-learning path on those platforms does not work as shipped. Apptainer/Singularity is unaffected, because `singularity exec` bypasses `%runscript` and genuinely needs the explicit `python`.
+**Consequence for your data.** None. Nothing runs.
 
-**Workaround.** Either one:
+**Fix.** The `ENTRYPOINT` line has been removed from the Dockerfile, so an image built from the current repository is correct. Seeing this error means your image was built from an older checkout: `git pull`, then rebuild.
 
-- Edit the last line of `containers/Dockerfile` to `ENTRYPOINT []` with `CMD ["python"]`, then rebuild the image.
-- Remove the `"python",` element from the Docker argv in **both** `pipeline.py:91` and `pipeline.py:249`. Both must be changed, or the batch path will diverge from the interactive path.
+```bash
+cd containers
+docker build -t livrvub/dl-upsampling:latest -f Dockerfile ..
+```
+
+Apptainer/Singularity was never affected, because `singularity exec` bypasses `%runscript` and genuinely needs the explicit `python`. That asymmetry is why only one of the two recipes had to change.
 
 !!! info
-    This entry is reasoned from documented ENTRYPOINT/CMD semantics plus the two source files. The image is not built on the machine where the documentation was verified, so the failure was not executed.
+    Both the original diagnosis and the fix are reasoned from documented ENTRYPOINT/CMD semantics plus the two source files. The image is not built on the machine where the documentation was verified, so neither the failure nor the fix was executed.
 
 ---
 

@@ -260,28 +260,31 @@ envs). Read from the installed `cellpose/models.py`:
   eats the bottom of the biological range** depending on input scale. The sibling project lowered
   its equivalent to 4 and recorded it as a protocol deviation.
 
-## 5. The Docker engine path is broken
+## 5. The Docker engine path — fixed 2026-09-18, was broken
 
-`containers/Dockerfile` ends:
-```
-ENTRYPOINT ["python"]
-```
-`pipeline.py:84-97` (and `:241-255`) builds:
+`containers/Dockerfile` used to end `ENTRYPOINT ["python"]` while `pipeline.py:84-97`
+(and `:241-255`) builds:
 ```
 docker run --rm --gpus all -v ... <image> python /opt/dl_project/scripts/inference.py --input ...
 ```
-Docker concatenates ENTRYPOINT + CMD, so the argv inside the container is
+Docker concatenates ENTRYPOINT + CMD, so the argv inside the container was
 **`python python /opt/dl_project/scripts/inference.py ...`** — Python treats the literal string
 `python` as the script path and dies with
 `can't open file '/opt/python': [Errno 2] No such file or directory`.
 
-*Confidence: reasoned from documented ENTRYPOINT/CMD semantics and the two source files.
-Not executed — the image is not built on this machine.* Fix is one of: drop `"python"` from the
-argv list in both blocks, or change the Dockerfile to `ENTRYPOINT []` / `CMD ["python"]`.
+**Resolved by deleting the `ENTRYPOINT` line**, not by setting `ENTRYPOINT []`. Deleting inherits
+the NGC base image's own entrypoint, which execs the given command; `ENTRYPOINT []` would clear it.
+`pipeline.py` was deliberately left alone — fixing the argv there would have meant editing two
+duplicated blocks, and the recipe is the single place the asymmetry belongs.
 
-The Singularity path is **correct**: `singularity exec` bypasses `%runscript`, so the explicit
-`python` is required there. The two engines genuinely need different argv, which is why this
-slipped through.
+*Confidence: reasoned from documented ENTRYPOINT/CMD semantics and the two source files.
+Neither the failure nor the fix was executed — the image is not built on this machine.*
+⚠️ **Images built before this change still carry the bad ENTRYPOINT and still fail.** A rebuild is
+required, which is why the docs now frame the error as a stale-image symptom rather than a defect.
+
+The Singularity path was always **correct**: `singularity exec` bypasses `%runscript`, so the
+explicit `python` is required there. The two engines genuinely need different argv, which is why
+this slipped through and why only one recipe had to change. Do not "unify" them.
 
 Related, unverified but load-bearing for the README's cross-platform claim:
 - `--gpus all` has no meaning on Docker Desktop for macOS (no NVIDIA passthrough). The README
@@ -403,7 +406,8 @@ Ordered by consequence for a published number, not by effort.
 1. **Sign-inversion guard** — §silent-failure 3. One correlation check. Cheapest defence against
    the sibling project's most-repeated bug.
 2. **Scale-domain guard + documented acquisition protocol** — §3. The gating scientific issue.
-3. **Fix the Docker argv** — §5. The entire Windows/macOS story is currently non-functional.
+3. ~~**Fix the Docker argv** — §5.~~ Done 2026-09-18: `ENTRYPOINT` deleted from the Dockerfile.
+   Not executed end-to-end; the Windows/macOS path is unverified, not proven working.
 4. **Fix `on_quantify()` factor desync and the hardcoded `scale=(0.25,0.25)`** — §silent-failure
    4 and 5. Both produce wrong physical sizes from a correct image.
 5. **Relabel or re-implement the Cellpose model/diameter controls** — §4. The UI currently
